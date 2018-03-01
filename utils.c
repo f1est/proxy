@@ -1,3 +1,7 @@
+/*
+ * @author f1est 
+ */
+ 
 #include "utils.h"
 #include "config.h"
 #include "log.h"

@@ -1,3 +1,7 @@
+/*
+ * @author f1est 
+ */
+ 
 #include "common.h"
 #include "transport.h"
 #include "utils.h"
@@ -41,7 +45,7 @@ static void syntax(const char* program_name)
                         "Options are:\n"
                         "  -d        Do not daemonize (run in foreground).\n"
 #ifdef HAVE_CONFIG
-                        "  -f FILE   Use an alternate configuration file.\n"
+                        "  -c FILE   Use an alternate configuration file.\n"
 #else        
                         "  -s        Use SSL/TLS.\n"
                         "  -c        SSL Certificate chain file.\n"
@@ -66,7 +70,7 @@ static void process_cmdline (int argc, char **argv)
 
 #ifdef HAVE_CONFIG
         const char *config_fname = NULL;
-        while ((opt = getopt (argc, argv, "f:dh")) != -1) {
+        while ((opt = getopt (argc, argv, "c:dh")) != -1) {
 #else        
         int numInputFiles;
         while ((opt = getopt (argc, argv, "dsc:k:m:h")) != -1) {
@@ -77,7 +81,7 @@ static void process_cmdline (int argc, char **argv)
                         break;
 
 #ifdef HAVE_CONFIG
-                case 'f':
+                case 'c':
                         config_fname = strdup(optarg);
                         if (!config_fname) {
                                 fprintf (stderr,
@@ -198,14 +202,6 @@ int main(int argc, char **argv)
         if (evutil_parse_sockaddr_port(addresses[1],(struct sockaddr*)&connect_to_addr, &connect_to_addrlen) < 0)
                 syntax(argv[0]);
 #endif
-/*
-        if (use_ssl) {
-                if (!certificate_chain_file || !private_key_file) {
-                        fputs("Should specify certificate_chain_file and private_key_file when in SSL/TLS mode.\n", stderr);
-                        return 1;
-                }
-        }
-*/
         base = event_base_new();
         if (!base) {
                 perror("event_base_new()");
@@ -257,11 +253,12 @@ int main(int argc, char **argv)
 
 
         /* Switch to a different user if we're running as root */
-        if (geteuid () == 0)
-                change_user();
-        else
+        if (geteuid () == 0) {
                 syslog(LOG_WARNING,
-                             "Not running as root, so not changing UID/GID. \n");
+                             "You try running as root, so changing UID/GID. "
+                             "I get settings from config file\n");
+                change_user();
+        }
 
         event_base_dispatch(base);
 

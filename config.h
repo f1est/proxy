@@ -1,9 +1,13 @@
+/*
+ * @author f1est 
+ */
+ 
 #ifndef CONFIG_H
 #define CONFIG_H
 
 #include <libconfig.h>
 
-#define DEFAULT_CONFIG_FILE_NAME "/etc/proxy/proxy.conf"
+#define DEFAULT_CONFIG_FILE_NAME "/etc/embedi/embediproxy.conf"
 
 void load_config(const char *config_fname);
 void free_config();

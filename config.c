@@ -1,3 +1,7 @@
+/*
+ * @author f1est 
+ */
+ 
 #ifdef HAVE_CONFIG
 
 #include "config.h"
@@ -37,7 +41,7 @@ const char* config_get_listen_address()
 {
         const char *address;
         if(!config_lookup_string(&cfg, "listen_address", &address)) {
-                fprintf(stderr, "Could not find 'listen_address' setting in configuration file.\n");
+                syslog(LOG_INFO, "Could not find 'listen_address' setting in configuration file.\n");
                 exit(EXIT_FAILURE);
         }
         else {        
@@ -50,7 +54,7 @@ const char* config_get_connect_address()
 {
         const char *address;
         if(!config_lookup_string(&cfg, "connect_address", &address)) {
-                fprintf(stderr, "Could not find 'connect_address' setting in configuration file.\n");
+                syslog(LOG_INFO, "Could not find 'connect_address' setting in configuration file.\n");
                 exit(EXIT_FAILURE);
         }
         else {
@@ -62,7 +66,7 @@ const char* config_get_connect_address()
 void config_get_backlog(int *backlog)
 {
         if(!config_lookup_int(&cfg, "max_listeners", backlog)) {
-                fprintf(stderr, "Could not find 'max_listeners' setting in configuration file.\n");
+                syslog(LOG_INFO, "Could not find 'max_listeners' setting in configuration file.\n");
                 return;
         }
         else {
@@ -73,10 +77,10 @@ void config_get_backlog(int *backlog)
 void config_check_use_ssl(int *use_ssl)
 {
         if(!config_lookup_bool(&cfg, "ssl", use_ssl)) {
-                if(!config_lookup_bool(&cfg, "tls", use_ssl)) {
-                        fprintf(stderr, "Could not find 'ssl' or 'tls' setting in configuration file.\n");
+//                if(!config_lookup_bool(&cfg, "tls", use_ssl)) {
+                        syslog(LOG_INFO, "Could not find 'ssl' setting in configuration file.\n");
                         return;
-                }
+//                }
         }
         else {
                 extern const char *certificate_chain_file;
@@ -86,7 +90,6 @@ void config_check_use_ssl(int *use_ssl)
                         syslog(LOG_INFO, "TLS/SSL: Could not find 'ssl_certificate_file' or 'ssl_private_key_file' setting in configuration file.\n");
                 }
         }
-        syslog(LOG_INFO, "Turned on use TLS/SSL\n");
 }
 
 
@@ -97,7 +100,7 @@ static int config_get_id(const char *setting)
         int id = -1;
         if(!config_lookup_string(&cfg, setting, &user_group)) {
                 if(!config_lookup_int(&cfg, setting, &id)) {
-                        fprintf(stderr, "Could not find '%s' setting in configuration file.\n", setting);
+                        syslog(LOG_INFO, "Could not find '%s' setting in configuration file.\n", setting);
                         return -1;
                 }
         }

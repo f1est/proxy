@@ -1,3 +1,7 @@
+/*
+ * @author f1est 
+ */
+ 
 #ifndef COMMON_H
 #define COMMON_H
 

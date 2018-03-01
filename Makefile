@@ -1,16 +1,17 @@
+#gcc main.c transport.c /home/boris/projects/EMBEDI/libevent/install/lib/libevent_openssl.a /home/boris/projects/EMBEDI/libevent/install/lib/libevent.a -o embediProxy -I /home/boris/projects/EMBEDI/libevent/install/include/ -lssl -lcrypto -lpthread -I /home/boris/projects/EMBEDI/libevent/ -I /home/boris/projects/EMBEDI/libevent/build/include
 
 CFLAGS 		= -DNDEBUG --std=c11 -D_BSD_SOURCE #-Wall 
 CC 		=gcc
 CXX 		=g++
 
 SOURCES 	=$(wildcard *.c)
-ARCHS 		=/home/boris/projects/libs/libevent/install/lib/libevent_openssl.a /home/boris/projects/libs/libevent/install/lib/libevent.a
+ARCHS 		=/home/boris/projects/EMBEDI/le-EmbediProxy/libs/libevent/install/lib/libevent_openssl.a /home/boris/projects/EMBEDI/le-EmbediProxy/libs/libevent/install/lib/libevent.a
 LIBS 		=-lssl -lcrypto -lconfig #-lpthread 
-INCLUDES 	=-I /home/boris/projects/libs/libevent/ -I /home/boris/projects/libs/libevent/install/include/ 
+INCLUDES 	=-I /home/boris/projects/EMBEDI/le-EmbediProxy/libs/libevent/ -I /home/boris/projects/EMBEDI/le-EmbediProxy/libs/libevent/install/include/ 
 OBJS 		=$(SOURCES:.c=.o)
-PROXY 	=proxy
+EMBEDIPROXY 	=embediProxy
 
-all:  $(PROXY)
+all:  $(EMBEDIPROXY)
 
 clang-address: CC 	=/home/boris/projects/LLVM/llvm-5.0.0/install/bin/clang
 clang-address: CFLAGS 	= -DCLANG_SANITIZER -DDEBUG -g -fsanitize=address -fno-omit-frame-pointer -fsanitize-address-use-after-scope -fsanitize=leak --std=c11 -D_BSD_SOURCE
@@ -27,8 +28,8 @@ clang-undef: all
 debug: CFLAGS 	= -DDEBUG -g --std=c11 -D_BSD_SOURCE
 debug: all
 
-proxy:
-$(PROXY):$(OBJS)
+embediProxy:
+$(EMBEDIPROXY):$(OBJS)
 	$(CC) $(CFLAGS) $(OBJS) $(ARCHS) $(INCLUDES) -o $@ $(LIBS)
 
 %.o : %.c
@@ -38,4 +39,4 @@ $(PROXY):$(OBJS)
 
 clean: 
 	rm -f *.o
-	rm proxy
+	rm embediProxy

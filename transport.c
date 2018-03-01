@@ -1,17 +1,12 @@
+/*
+ * @author f1est 
+ */
+ 
 #include "transport.h"
 
 
 #define MAX_OUTPUT (512*1024)
 
-static struct bufferevent *b_out = NULL;
-static struct bufferevent *b_in = NULL;
-extern SSL_CTX *ssl_ctx;
-
-extern struct sockaddr_storage connect_to_addr;
-extern int connect_to_addrlen;
-
-extern int use_ssl;
-extern struct event_base *base;
 
 static void drained_writecb(struct bufferevent *bev, void *ctx);
 static void eventcb(struct bufferevent *bev, short what, void *ctx);
@@ -32,7 +27,7 @@ static void readcb(struct bufferevent *bev, void *ctx)
         if(len > 0) {
                 data_src = malloc(len);
                 evbuffer_copyout(src, data_src, len);
-                fprintf(stderr,"!!! BUFFER SRC: len: %d data: %s\n", (int)len, data_src);
+                fprintf(stderr,"!!! BUFFER SRC: len: %d data:\n %s\n", (int)len, data_src);
         }
 #endif
 
@@ -47,7 +42,7 @@ static void readcb(struct bufferevent *bev, void *ctx)
                 data_dst = malloc(len_dst);
                 evbuffer_copyout(dst, data_dst, len_dst);
 
-                fprintf(stderr,"!!! BUFFER DST: len: %d data: %s\n", (int)len_dst, data_dst);
+                fprintf(stderr,"!!! BUFFER DST: len: %d data:\n %s\n", (int)len_dst, data_dst);
         }
 #endif
 
@@ -129,6 +124,14 @@ static void eventcb(struct bufferevent *bev, short what, void *ctx)
 
 void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,struct sockaddr *a, int slen, void *p)
 {
+        struct bufferevent *b_out = NULL;
+        struct bufferevent *b_in = NULL;
+        extern SSL_CTX *ssl_ctx;
+        extern struct sockaddr_storage connect_to_addr;
+        extern int connect_to_addrlen;
+        extern int use_ssl;
+        extern struct event_base *base;
+
         if (use_ssl) {
                 SSL *ssl = SSL_new(ssl_ctx);
                 b_in = bufferevent_openssl_socket_new(base, fd, ssl, BUFFEREVENT_SSL_ACCEPTING,

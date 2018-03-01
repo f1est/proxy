@@ -1,3 +1,7 @@
+/*
+ * @author f1est 
+ */
+ 
 #ifndef LOG_H
 #define LOG_H
 #include <syslog.h>

@@ -1,3 +1,7 @@
+/*
+ * @author f1est 
+ */
+ 
 #include "ssl.h"
 #include "log.h"
 
@@ -5,6 +9,7 @@
 #include <openssl/x509v3.h>
 #include <openssl/rsa.h>
 
+#define TLS_method SSLv23_method
 
 /* https://stackoverflow.com/questions/256405/programmatically-create-x509-certificate-using-openssl */
 
@@ -106,16 +111,13 @@ void free_ssl()
 /* return 0 on success */
 int init_ssl()
 {
-        int r;
-#define TLS_method SSLv23_method
 #if (OPENSSL_VERSION_NUMBER < 0x10100000L) || defined(LIBRESSL_VERSION_NUMBER)
         SSL_library_init();
         ERR_load_crypto_strings();
         SSL_load_error_strings();
         OpenSSL_add_all_algorithms();
 #endif
-        r = RAND_poll();
-        if (r == 0) {
+        if(RAND_poll() == 0) {
                 fprintf(stderr, "RAND_poll() failed.\n");
                 return 1;
         }
