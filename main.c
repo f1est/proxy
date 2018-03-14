@@ -13,9 +13,6 @@
 #endif
 
 #include <sysexits.h>
-#include <signal.h>
-#include <sys/types.h>  /* umask */
-#include <sys/stat.h>   /* umask */
 
 struct sockaddr_storage listen_on_addr;
 struct sockaddr_storage connect_to_addr;
@@ -26,9 +23,10 @@ const char *private_key_file = NULL;
 
 int use_daemon = 1;     /* boolean */
 int use_ssl = 0;        /* boolean */
+int use_core_webtoolkit = 0;        /* boolean */
 int backlog = -1;
 
-struct event_base *base;
+struct event_base *base = NULL;
 
 #ifndef HAVE_CONFIG
 static char **addresses = NULL;         /* addresses[0] == listen address; addresses[1] == connect address */
@@ -149,25 +147,46 @@ int main(int argc, char **argv)
         int socklen;
 
         struct evconnlistener *listener;
-        struct event *signal_SIGINT_event;
-        struct event *signal_SIGHUP_event;
-        struct event *signal_SIGPIPE_event;
-        struct event *signal_SIGTERM_event;
-        
-        /* Only allow u+rw bits. This may be required for some versions
-         * of glibc so that mkstemp() doesn't make us vulnerable.
-         */
-        umask (0177);
+
+#ifndef NDEBUG
+        printf(" ################### DEBUG \n");
+#else
+        printf(" ################### NDEBUG \n");
+#endif
+
         
         process_cmdline(argc, argv);
+        
         if(use_daemon) {
-                if(daemon(1,1) < 0 ){
+                daemonize(argv[0]);
+/*
+                if(daemon(0,0) < 0 ){
                         fprintf (stderr,
                                  "start daemon error: %s\n", strerror (errno));
-                        exit (EX_OSERR);
+                        exit (EXIT_FAILURE);
                 }
+*/
         }
                 
+        base = event_base_new();
+        if (!base) {
+                perror("event_base_new()");
+                return 1;
+        }
+        set_signals();
+
+        debug_msg("default method: %s\n", event_base_get_method(base));
+
+        /* Switch to a different user if we're running as root */
+        if (geteuid () == 0) {
+                syslog(LOG_WARNING,
+                             "You try running as root, so need changing UID/GID. "
+                             "I try get settings from config file\n");
+                if(change_user() !=0) {
+                        syslog(LOG_INFO, "Couldn't change UID/GID. Exit\n");
+                        goto EXIT;
+                }
+        }
 
         socklen = sizeof(listen_on_addr);
         connect_to_addrlen = sizeof(connect_to_addr);
@@ -195,6 +214,7 @@ int main(int argc, char **argv)
 
         config_get_backlog(&backlog);
         config_check_use_ssl(&use_ssl);
+        config_check_core_module();
 
 #else
         if (evutil_parse_sockaddr_port(addresses[0],(struct sockaddr*)&listen_on_addr, &socklen) < 0) 
@@ -202,15 +222,6 @@ int main(int argc, char **argv)
         if (evutil_parse_sockaddr_port(addresses[1],(struct sockaddr*)&connect_to_addr, &connect_to_addrlen) < 0)
                 syntax(argv[0]);
 #endif
-        base = event_base_new();
-        if (!base) {
-                perror("event_base_new()");
-                return 1;
-        }
-#ifndef NDEBUG
-        fprintf(stderr, "default method: %s\n", event_base_get_method(base));
-#endif
-
         if (use_ssl && (init_ssl() != 0)) {
                 return 1;
         }
@@ -218,56 +229,34 @@ int main(int argc, char **argv)
             LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE,
             backlog, (struct sockaddr*)&listen_on_addr, socklen);
 
-        if (! listener) {
+        if (!listener) {
                 fprintf(stderr, "Couldn't open listener.\n");
                 event_base_free(base);
+#ifdef HAVE_CONFIG
+                free_config();
+#endif
+                free_ssl();
                 return 1;
         }
-
-/* 
- * handling signals
- */
-        signal_SIGINT_event = evsignal_new(base, SIGINT, general_signal_cb, (void *)base);
-        if (!signal_SIGINT_event || event_add(signal_SIGINT_event, NULL)<0) {
-                fprintf(stderr, "Could not create/add a signal event: SIGINT!\n");
-                return 1;
-        }
-        
-        signal_SIGHUP_event = evsignal_new(base, SIGHUP, general_signal_cb, (void *)base);
-        if (!signal_SIGHUP_event || event_add(signal_SIGHUP_event, NULL)<0) {
-                fprintf(stderr, "Could not create/add a signal event: SIGHUP!\n");
-                return 1;
+        if(use_core_webtoolkit) {
+                if(http_request_init(listener) != 0) {
+                        fprintf(stderr, "Couldn't create http server.\n");
+                        evconnlistener_free(listener);
+                        event_base_free(base);
+#ifdef HAVE_CONFIG
+                        free_config();
+#endif
+                        free_ssl();
+                        return 1;
+                }
         }
 
-        signal_SIGPIPE_event = evsignal_new(base, SIGPIPE, general_signal_cb, (void *)base);
-        if (!signal_SIGPIPE_event || event_add(signal_SIGPIPE_event, NULL)<0) {
-                fprintf(stderr, "Could not create/add a signal event: SIGPIPE!\n");
-                return 1;
-        }
-
-        signal_SIGTERM_event = evsignal_new(base, SIGTERM, general_signal_cb, (void *)base);
-        if (!signal_SIGTERM_event || event_add(signal_SIGTERM_event, NULL)<0) {
-                fprintf(stderr, "Could not create/add a signal event: SIGTERM!\n");
-                return 1;
-        }
-
-
-        /* Switch to a different user if we're running as root */
-        if (geteuid () == 0) {
-                syslog(LOG_WARNING,
-                             "You try running as root, so changing UID/GID. "
-                             "I get settings from config file\n");
-                change_user();
-        }
 
         event_base_dispatch(base);
 
-
-        evconnlistener_free(listener);
-        event_free(signal_SIGINT_event);
-        event_free(signal_SIGHUP_event);
-        event_free(signal_SIGPIPE_event);
-        event_free(signal_SIGTERM_event);
+EXIT:
+        if(listener)
+                evconnlistener_free(listener);
         
         event_base_free(base);
 
@@ -275,6 +264,8 @@ int main(int argc, char **argv)
         free_config();
 #endif
         free_ssl();
+        free_signals();
+        closelog();
         fprintf(stderr, "done\n");
         return 0;
 }

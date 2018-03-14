@@ -8,13 +8,15 @@
 #include "common.h"
 #include "log.h"
 
+#include <ctype.h>
 #include <sys/types.h>
 #include <pwd.h>
 #include <grp.h>
 
 static config_t cfg;
-//static config_t *cfg = NULL;
-static config_setting_t *setting = NULL;
+//static config_setting_t *setting = NULL;
+
+extern int use_core_webtoolkit;
 
 void load_config (const char *config_fname)
 {
@@ -27,14 +29,25 @@ void load_config (const char *config_fname)
                 config_destroy(&cfg);
                 exit(EXIT_FAILURE);
         }
-#ifndef NDEBUG
-        fprintf(stderr, "The configuration file '%s' was read successfully!\n", config_fname);
-#endif
+        debug_msg("The configuration file '%s' was read successfully!\n", config_fname);
 }
 
 void free_config() 
 {
         config_destroy(&cfg);
+}
+
+const char* config_get_pid_file_name()
+{
+        const char *PID_file_name;
+        if(!config_lookup_string(&cfg, "pid_file", &PID_file_name)) {
+                syslog(LOG_INFO, "Could not find 'pid_file' setting in configuration file.\n");
+                return DEFAULT_PID_FILE_NAME;
+        }
+        else {        
+                syslog(LOG_INFO, "pid_file is '%s' \n",PID_file_name);
+                return PID_file_name;
+        }
 }
 
 const char* config_get_listen_address()
@@ -176,11 +189,22 @@ int config_get_GID()
         return config_get_id("group");
 }
 
+void config_check_core_module()
+{
+        if(!config_lookup_bool(&cfg, "core_module", &use_core_webtoolkit)) {
+                use_core_webtoolkit = 0;
+        }
+}
 
-
-
-
-
+void config_get_http_server_timeout(int* timeout)
+{
+        if(!config_lookup_int(&cfg, "http_server_timeout", timeout)) {
+                syslog(LOG_INFO, "Could not find 'http_server_timeout' setting in configuration file.\n");
+                return;
+        }
+        else 
+                syslog(LOG_INFO, "http_server_timeout is '%d' \n", *timeout);
+}
 
 
 

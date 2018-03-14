@@ -2,8 +2,8 @@ openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -nodes -verify 
 ab -c 508 -k -r -t 10 http://172.17.10.31:8888
 
 export PATH=/home/boris/projects/LLVM/llvm-5.0.0/install/bin/:$PATH
-ASAN_SYMBOLIZER_PATH=/home/boris/projects/LLVM/llvm-5.0.0/install/bin/llvm-symbolizer ./embediProxy -d 0.0.0.0:8888 127.0.0.1:8080
+ASAN_SYMBOLIZER_PATH=/home/boris/projects/LLVM/llvm-5.0.0/install/bin/llvm-symbolizer ./proxy -d 0.0.0.0:8888 127.0.0.1:8080
  
-MSAN_OPTIONS=poison_in_dtor=1 ASAN_SYMBOLIZER_PATH=/home/boris/projects/LLVM/llvm-5.0.0/install/bin/llvm-symbolizer ./embediProxy -d 0.0.0.0:8888 127.0.0.1:8080
+MSAN_OPTIONS=poison_in_dtor=1 ASAN_SYMBOLIZER_PATH=/home/boris/projects/LLVM/llvm-5.0.0/install/bin/llvm-symbolizer ./proxy -d 0.0.0.0:8888 127.0.0.1:8080
 
 

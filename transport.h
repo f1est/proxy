@@ -14,7 +14,9 @@
 #include <openssl/err.h>
 #include <openssl/rand.h>
 
-
+struct http_proxy_handle;
 void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,struct sockaddr *a, int slen, void *p);
+int http_request_init(struct evconnlistener *listener);
+
 
 #endif /* TRANSPORT_H */

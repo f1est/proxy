@@ -122,6 +122,11 @@ int init_ssl()
                 return 1;
         }
         ssl_ctx = SSL_CTX_new(TLS_method());
+	if (!ssl_ctx) {
+                debug_msg("SSL_CTX_new filed: \n");
+                ERR_print_errors_fp(stderr);
+                return 1;
+	}
         SSL_CTX_set_options(ssl_ctx, SSL_OP_NO_SSLv3);
         if (use_ssl) {
                 if (certificate_chain_file && private_key_file) {
@@ -129,6 +134,7 @@ int init_ssl()
                                 !SSL_CTX_use_PrivateKey_file(ssl_ctx, private_key_file, SSL_FILETYPE_PEM)) {
                                 syslog(LOG_INFO, "TLS/SSL: Couldn't read %s or %s.\n", certificate_chain_file, private_key_file);
                                 fprintf(stderr, "TLS/SSL: Couldn't read %s or %s.\n", certificate_chain_file, private_key_file);
+                                free_ssl();
                                 return 2;
                         }
                 }
@@ -138,11 +144,13 @@ int init_ssl()
                         if(!pkey || !x509) {
                                 syslog(LOG_INFO, "TLS/SSL: Couldn't generate certificate or private key\n");
                                 fprintf(stderr, "TLS/SSL: Couldn't generate certificate or private key\n");
+                                free_ssl();
                                 return 3;
                         }
                         if (!SSL_CTX_use_certificate(ssl_ctx, x509) ||
                                 !SSL_CTX_use_PrivateKey(ssl_ctx, pkey)) {
                                 fprintf(stderr, "TLS/SSL: Something is wrong!\n");
+                                free_ssl();
                                 return 4;
                         }
                 }

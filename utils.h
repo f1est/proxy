@@ -7,8 +7,10 @@
 
 #include "common.h"
 
-void general_signal_cb(evutil_socket_t sig, short events, void *user_data);
+void daemonize(const char* program_name);
+void set_signals();
+void free_signals();
 
-void change_user();
+int change_user();
 
 #endif /*UTILS_H*/

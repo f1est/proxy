@@ -13,12 +13,19 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <sysexits.h>
+#include <fcntl.h>
+
+#include <signal.h>
+#include <sys/types.h>  /* umask */
+#include <sys/stat.h>   /* umask */
 
 #include <event2/bufferevent_ssl.h>
 #include <event2/bufferevent.h>
 #include <event2/buffer.h>
 #include <event2/listener.h>
 #include <event2/util.h>
+#include <event2/http.h>
+#include <event2/http_struct.h>
 
 //#define _POSIX_C_SOURCE 1
 
