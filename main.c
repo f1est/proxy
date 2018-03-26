@@ -7,10 +7,7 @@
 #include "utils.h"
 #include "ssl.h"
 #include "log.h"
-
-#ifdef HAVE_CONFIG
 #include "config.h"
-#endif
 
 #include <sysexits.h>
 
@@ -26,39 +23,19 @@ int use_ssl = 0;        /* boolean */
 int use_core_webtoolkit = 0;        /* boolean */
 int backlog = -1;
 
+struct http_proxy_core_s *proxy_core = NULL;
 struct event_base *base = NULL;
-
-#ifndef HAVE_CONFIG
-static char **addresses = NULL;         /* addresses[0] == listen address; addresses[1] == connect address */
-#endif
 
 static void syntax(const char* program_name)
 {
-#ifdef HAVE_CONFIG
         fprintf(stderr, "Usage: %s [options]\n", program_name);
-#else        
-        fprintf(stderr, "Usage: %s [options] <listen-on-addr> <connect-to-addr>\n", program_name);
-#endif
         fprintf(stderr, "\n"
                         "Options are:\n"
                         "  -d        Do not daemonize (run in foreground).\n"
-#ifdef HAVE_CONFIG
                         "  -c FILE   Use an alternate configuration file.\n"
-#else        
-                        "  -s        Use SSL/TLS.\n"
-                        "  -c        SSL Certificate chain file.\n"
-                        "  -k        SSL Private key file.\n"
-                        "  -m        Max count listeners.\n"
-#endif
                         "  -h        Display this usage information.\n");
 
         fputs("\n\n",stderr);
-#ifndef HAVE_CONFIG
-        fputs("Example:\n", stderr);
-        fprintf(stderr,"   %s -d -s -c cert.pem -k key.pem 0.0.0.0:8888 127.0.0.1:8080\n", program_name);
-        fprintf(stderr,"   %s -d 0.0.0.0:8888 127.0.0.1:8080\n", program_name);
-#endif
-
         exit(EX_OK);
 }
 
@@ -66,19 +43,13 @@ static void process_cmdline (int argc, char **argv)
 {
         int opt;
 
-#ifdef HAVE_CONFIG
         const char *config_fname = NULL;
         while ((opt = getopt (argc, argv, "c:dh")) != -1) {
-#else        
-        int numInputFiles;
-        while ((opt = getopt (argc, argv, "dsc:k:m:h")) != -1) {
-#endif
                 switch (opt) {
                 case 'd':
                         use_daemon = 0;
                         break;
 
-#ifdef HAVE_CONFIG
                 case 'c':
                         config_fname = strdup(optarg);
                         if (!config_fname) {
@@ -88,33 +59,6 @@ static void process_cmdline (int argc, char **argv)
                                 exit (EX_SOFTWARE);
                         }
                         break;
-#else        
-                case 's':
-                        use_ssl = 1;
-                        break;
-                case 'c':
-                        certificate_chain_file = strdup(optarg);
-                        if (!certificate_chain_file) {
-                                fprintf (stderr,
-                                        "%s: Could not allocate memory for certificate_chain_file.\n",
-                                        argv[0]);
-                                exit (EX_SOFTWARE);
-                        }
-                        break;
-                case 'k':
-                        private_key_file = strdup(optarg);
-                        if (!private_key_file) {
-                                fprintf (stderr,
-                                        "%s: Could not allocate memory for private_key_file.\n",
-                                        argv[0]);
-                                exit (EX_SOFTWARE);
-                        }
-                        break;
-                case 'm':
-                        backlog = atoi(optarg);
-                        break;
-#endif
-
                 case 'h':
                         syntax(argv[0]);
                         exit (EX_OK);
@@ -125,34 +69,29 @@ static void process_cmdline (int argc, char **argv)
                 }
         }
 
-#ifdef HAVE_CONFIG
         if(config_fname) 
                 load_config(config_fname); 
         else 
-                load_config(DEFAULT_CONFIG_FILE_NAME); 
-#else        
-        numInputFiles = argc - optind;
-        if(numInputFiles != 2)
-                syntax(argv[0]);
-        addresses = argv + optind;
-#endif
+                load_config(DEFAULT_CONFIG_FILE_NAME);
+        if(config_fname)
+                free((void *)config_fname);
+
 }
 
 int main(int argc, char **argv)
 {
-
-#ifdef HAVE_CONFIG
-        const char * address = NULL;
-#endif
+        const char *address = NULL;
         int socklen;
 
         struct evconnlistener *listener;
 
 #ifndef NDEBUG
         printf(" ################### DEBUG \n");
+        set_logfile(stderr);
 #else
         printf(" ################### NDEBUG \n");
 #endif
+
 
         
         process_cmdline(argc, argv);
@@ -193,8 +132,7 @@ int main(int argc, char **argv)
         memset(&listen_on_addr, 0, socklen);
         memset(&connect_to_addr, 0, connect_to_addrlen);
 
-#ifdef HAVE_CONFIG
-        address = config_get_listen_address();
+        config_get_listen_address(&address);
         if(address) {
                 if (evutil_parse_sockaddr_port(address,(struct sockaddr*)&listen_on_addr, &socklen) < 0) 
                 {
@@ -203,7 +141,7 @@ int main(int argc, char **argv)
                 }
         }
         address = NULL;
-        address = config_get_connect_address();
+        config_get_connect_address(&address);
         if(address) {
                 if (evutil_parse_sockaddr_port(address,(struct sockaddr*)&connect_to_addr, &connect_to_addrlen) < 0)
                 {
@@ -216,12 +154,6 @@ int main(int argc, char **argv)
         config_check_use_ssl(&use_ssl);
         config_check_core_module();
 
-#else
-        if (evutil_parse_sockaddr_port(addresses[0],(struct sockaddr*)&listen_on_addr, &socklen) < 0) 
-                syntax(argv[0]);
-        if (evutil_parse_sockaddr_port(addresses[1],(struct sockaddr*)&connect_to_addr, &connect_to_addrlen) < 0)
-                syntax(argv[0]);
-#endif
         if (use_ssl && (init_ssl() != 0)) {
                 return 1;
         }
@@ -232,20 +164,17 @@ int main(int argc, char **argv)
         if (!listener) {
                 fprintf(stderr, "Couldn't open listener.\n");
                 event_base_free(base);
-#ifdef HAVE_CONFIG
                 free_config();
-#endif
                 free_ssl();
                 return 1;
         }
         if(use_core_webtoolkit) {
-                if(http_request_init(listener) != 0) {
+                proxy_core = http_request_init(listener);
+                if(proxy_core == NULL) {
                         fprintf(stderr, "Couldn't create http server.\n");
                         evconnlistener_free(listener);
                         event_base_free(base);
-#ifdef HAVE_CONFIG
                         free_config();
-#endif
                         free_ssl();
                         return 1;
                 }
@@ -255,14 +184,14 @@ int main(int argc, char **argv)
         event_base_dispatch(base);
 
 EXIT:
-        if(listener)
+        if(use_core_webtoolkit)
+                free_proxy_core(proxy_core);
+        else if(listener)
                 evconnlistener_free(listener);
         
         event_base_free(base);
 
-#ifdef HAVE_CONFIG
         free_config();
-#endif
         free_ssl();
         free_signals();
         closelog();

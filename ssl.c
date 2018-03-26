@@ -26,6 +26,7 @@ static void generate_cert_key()
         RSA             *rsa;
         X509_NAME       *name;
         pkey = EVP_PKEY_new();
+
         if(!pkey) {
                 fprintf(stderr, "TLS/SSL: Can not allocate EVP_PKEY \n");
                 return;
@@ -85,7 +86,7 @@ static void generate_cert_key()
         X509_set_issuer_name(x509, name);
         
         /* sign our certificate */
-        if(!X509_sign(x509, pkey, EVP_sha1())) {        
+        if(!X509_sign(x509, pkey, EVP_sha512())) {        
                 fprintf(stderr, "TLS/SSL: Error signing certificate\n");
                 free_ssl();
         }
@@ -117,19 +118,25 @@ int init_ssl()
         SSL_load_error_strings();
         OpenSSL_add_all_algorithms();
 #endif
+
         if(RAND_poll() == 0) {
                 fprintf(stderr, "RAND_poll() failed.\n");
                 return 1;
         }
+
         ssl_ctx = SSL_CTX_new(TLS_method());
+
 	if (!ssl_ctx) {
                 debug_msg("SSL_CTX_new filed: \n");
                 ERR_print_errors_fp(stderr);
                 return 1;
 	}
+
         SSL_CTX_set_options(ssl_ctx, SSL_OP_NO_SSLv3);
+
         if (use_ssl) {
                 if (certificate_chain_file && private_key_file) {
+
                         if (!SSL_CTX_use_certificate_chain_file(ssl_ctx, certificate_chain_file) ||
                                 !SSL_CTX_use_PrivateKey_file(ssl_ctx, private_key_file, SSL_FILETYPE_PEM)) {
                                 syslog(LOG_INFO, "TLS/SSL: Couldn't read %s or %s.\n", certificate_chain_file, private_key_file);
@@ -138,15 +145,18 @@ int init_ssl()
                                 return 2;
                         }
                 }
+
                 else {
                         syslog(LOG_INFO, "TLS/SSL: will be generate private key and self-signed certificate in memory\n");
                         generate_cert_key();
+
                         if(!pkey || !x509) {
                                 syslog(LOG_INFO, "TLS/SSL: Couldn't generate certificate or private key\n");
                                 fprintf(stderr, "TLS/SSL: Couldn't generate certificate or private key\n");
                                 free_ssl();
                                 return 3;
                         }
+
                         if (!SSL_CTX_use_certificate(ssl_ctx, x509) ||
                                 !SSL_CTX_use_PrivateKey(ssl_ctx, pkey)) {
                                 fprintf(stderr, "TLS/SSL: Something is wrong!\n");

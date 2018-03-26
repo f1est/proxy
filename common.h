@@ -14,10 +14,12 @@
 #include <getopt.h>
 #include <sysexits.h>
 #include <fcntl.h>
+#include <limits.h>     /* ULONG_MAX */
 
 #include <signal.h>
 #include <sys/types.h>  /* umask */
 #include <sys/stat.h>   /* umask */
+#include <ctype.h>      /* isxdigit */
 
 #include <event2/bufferevent_ssl.h>
 #include <event2/bufferevent.h>
@@ -27,6 +29,14 @@
 #include <event2/http.h>
 #include <event2/http_struct.h>
 
+#include <sys/socket.h>
+#include <netinet/in.h>
+
+#include <openssl/ssl.h>
+#include <openssl/err.h>
+#include <openssl/rand.h>
+#include <openssl/evp.h>
+
 //#define _POSIX_C_SOURCE 1
 
 /* Define boolean values */
@@ -35,5 +45,7 @@
 # define TRUE (!FALSE)
 #endif
 
+#define DEFAULT_SID_NAME "SID"
+#define MAX_SID_LENGTH EVP_MAX_MD_SIZE/2
 
 #endif /* COMMON_H */

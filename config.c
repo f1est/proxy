@@ -2,7 +2,6 @@
  * @author f1est 
  */
  
-#ifdef HAVE_CONFIG
 
 #include "config.h"
 #include "common.h"
@@ -50,29 +49,23 @@ const char* config_get_pid_file_name()
         }
 }
 
-const char* config_get_listen_address()
+void config_get_listen_address(const char **address)
 {
-        const char *address;
-        if(!config_lookup_string(&cfg, "listen_address", &address)) {
+        if(!config_lookup_string(&cfg, "listen_address", address)) {
                 syslog(LOG_INFO, "Could not find 'listen_address' setting in configuration file.\n");
-                exit(EXIT_FAILURE);
         }
         else {        
-                syslog(LOG_INFO, "listen_address is '%s' \n",address);
-                return address;
+                syslog(LOG_INFO, "listen_address is '%s' \n",*address);
         }
 }
 
-const char* config_get_connect_address()
+void config_get_connect_address(const char **address)
 {
-        const char *address;
-        if(!config_lookup_string(&cfg, "connect_address", &address)) {
+        if(!config_lookup_string(&cfg, "connect_address", address)) {
                 syslog(LOG_INFO, "Could not find 'connect_address' setting in configuration file.\n");
-                exit(EXIT_FAILURE);
         }
         else {
-                syslog(LOG_INFO, "connect_address is '%s' \n",address);
-                return address;
+                syslog(LOG_INFO, "connect_address is '%s' \n",*address);
         }
 }
 
@@ -133,7 +126,7 @@ static int config_get_id(const char *setting)
                 }
         /* Найдем ID если у нас строка (например user = "anybody") */
                 if(id < 0) {
-                        if(!strncmp("user", setting, sizeof("user"))) {
+                        if(!strncmp("user", setting, 4)) {
 
                                 struct passwd *thisuser = getpwnam (user_group);
 
@@ -148,7 +141,7 @@ static int config_get_id(const char *setting)
                                 syslog(LOG_INFO, "%s is '%s' \n", setting, user_group);
                                 goto EXIT;
                         }
-                        else if(!strncmp("group", setting, sizeof("group"))) {
+                        else if(!strncmp("group", setting, 5)) {
 
                                 struct group *thisgroup = getgrnam (user_group);
 
@@ -210,4 +203,3 @@ void config_get_http_server_timeout(int* timeout)
 
 
 
-#endif /* HAVE_CONFIG */

@@ -67,6 +67,7 @@ void daemonize(const char* program_name)
         
         /* Close all open file descriptors */
         int fd; 
+
         for (fd = sysconf(_SC_OPEN_MAX); fd >= 0; --fd) {
 #ifndef NDEBUG
         if(fd == 2 || fd ==1)
@@ -81,26 +82,25 @@ void daemonize(const char* program_name)
         const char *PID_file_name;
         
         memset(str,0,sizeof(str));
-#ifdef HAVE_CONFIG
-        PID_file_name = config_get_pid_file_name();
-#else
-        PID_file_name = DEFAULT_PID_FILE_NAME;
-#endif
 
-printf("1  daemonize PID_file_name: %s ~~~~~~~~~~~~~~~~~~~~\n", PID_file_name);
+        PID_file_name = config_get_pid_file_name();
+
         lfp=open(PID_file_name,O_RDWR|O_CREAT,0640);
+
         if (lfp < 0) {
                 /* can not open */
-                fprintf(stderr, "WARNING: Couldn't open pid_file: %s\n",PID_file_name); 
-                fprintf(stderr, "WARNING: Perhaps you do not have enough privileges\n"); 
+                syslog(LOG_WARNING, "WARNING: Couldn't open pid_file: %s\n",PID_file_name); 
+                syslog(LOG_WARNING, "WARNING: Perhaps you do not have enough privileges\n"); 
                 exit(EXIT_FAILURE);
         }
+
         if (lockf(lfp,F_TLOCK,0) < 0) { 
                 /* can not lock */
-                fprintf(stderr, "WARNING: Couldn't lock pid_file: %s\n",PID_file_name); 
-                fprintf(stderr, "WARNING: Server already running!\n"); 
+                syslog(LOG_WARNING, "WARNING: Couldn't lock pid_file: %s\n",PID_file_name); 
+                syslog(LOG_WARNING, "WARNING: Server already running!\n"); 
                 exit(EXIT_FAILURE);
         }
+
         sprintf(str,"%d\n",getpid());
         write(lfp,str,strlen(str)); /* record pid to lockfile */
 
@@ -121,60 +121,73 @@ static void general_signal_cb(evutil_socket_t sig, short events, void *user_data
         event_base_loopexit(base, NULL);
 }
 
-/*
- * handling signals
- */
+/* handling signals */
 void set_signals()
 {
         extern struct event_base *base;
+
         signal_SIGINT_event = evsignal_new(base, SIGINT, general_signal_cb, (void *)base);
+
         if (!signal_SIGINT_event || event_add(signal_SIGINT_event, NULL)<0) {
                 fprintf(stderr, "Could not create/add a signal event: SIGINT!\n");
                 exit(EXIT_FAILURE);
         }
         
         signal_SIGHUP_event = evsignal_new(base, SIGHUP, general_signal_cb, (void *)base);
+
         if (!signal_SIGHUP_event || event_add(signal_SIGHUP_event, NULL)<0) {
                 fprintf(stderr, "Could not create/add a signal event: SIGHUP!\n");
                 exit(EXIT_FAILURE);
         }
 
         signal_SIGPIPE_event = evsignal_new(base, SIGPIPE, general_signal_cb, (void *)base);
+
         if (!signal_SIGPIPE_event || event_add(signal_SIGPIPE_event, NULL)<0) {
                 fprintf(stderr, "Could not create/add a signal event: SIGPIPE!\n");
                 exit(EXIT_FAILURE);
         }
 
         signal_SIGTERM_event = evsignal_new(base, SIGTERM, general_signal_cb, (void *)base);
+
         if (!signal_SIGTERM_event || event_add(signal_SIGTERM_event, NULL)<0) {
                 fprintf(stderr, "Could not create/add a signal event: SIGTERM!\n");
                 exit(EXIT_FAILURE);
         }
+
         signal_SIGCHLD_event = evsignal_new(base, SIGCHLD, general_signal_cb, (void *)base);
+
         if (!signal_SIGCHLD_event || event_add(signal_SIGCHLD_event, NULL)<0) {
                 fprintf(stderr, "Could not create/add a signal event: SIGCHLD!\n");
                 exit(EXIT_FAILURE);
         }
 }
 
+/* dealloca */
 void free_signals()
 {
         if(signal_SIGINT_event)
                 event_free(signal_SIGINT_event);
+
         if(signal_SIGHUP_event)
                 event_free(signal_SIGHUP_event);
+
         if(signal_SIGPIPE_event)
                 event_free(signal_SIGPIPE_event);
+
         if(signal_SIGTERM_event)
                 event_free(signal_SIGTERM_event);
+
+        if(signal_SIGCHLD_event)
+                event_free(signal_SIGCHLD_event);
 }
 
+/* change user when run on root */
 /* Return 0 on success. -1 on failure */
 int change_user()
 {
-#ifdef HAVE_CONFIG        
         int gid = config_get_GID();
         int uid = config_get_UID();
+
         if (setgid (gid) < 0) {
                 fprintf (stderr,
                         "Unable to change to group '%d'.\n", gid);
@@ -201,6 +214,4 @@ int change_user()
         syslog(LOG_INFO, "Now running as user '%d'.\n", uid);
 
         return 0;
-#endif
-        return -1;
 }

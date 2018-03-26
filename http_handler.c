@@ -4,7 +4,12 @@
  
 #include "http_handler.h"
 #include "log.h"
+#include "utils.h"
+#include "session.h"
+#include "hashmap.h"
+
 #include <event2/keyvalq_struct.h>
+
 
 static void print_headers(struct evhttp_request *req, enum route_of_headers route)
 {
@@ -15,37 +20,51 @@ static void print_headers(struct evhttp_request *req, enum route_of_headers rout
         struct evbuffer *buffer_body = NULL;
         size_t len;
         char *body = NULL;
+
         switch(route){
+
                 case input:
                         header = evhttp_request_get_input_headers(req);
                         buffer_body = evhttp_request_get_input_buffer(req);
                         str_route = "input";
                         break;
+
                 case output:
                         header = evhttp_request_get_output_headers(req);
                         buffer_body = evhttp_request_get_output_buffer(req);
                         str_route = "output";
                         break;
+
                 default:
                         break;
         }
+
         if(!header || !buffer_body)
                 return;
                 
         kv = header->tqh_first;
-        printf("\tURI: %s\n", evhttp_request_get_uri(req));
+
+        fprintf(stderr,"\tResponse code: %d\n", evhttp_request_get_response_code(req));
+        fprintf(stderr,"\tURI: %s\n", evhttp_request_get_uri(req));
+
         while (kv) {
-                printf("\t%s header: %s: %s\n", str_route, kv->key, kv->value);
+                fprintf(stderr,"\t\t %s header: %s: %s\n", str_route, kv->key, kv->value);
                 kv = kv->next.tqe_next;
         }
-                printf("\tget_host: %s\n", evhttp_request_get_host(req));
+        
+        fprintf(stderr,"\tget_host: %s\n\n", evhttp_request_get_host(req));
 
         len = evbuffer_get_length(buffer_body);
+
+        debug_msg(" length of evbuffer = %zu", len);
         if(len > 0) {
-                body = malloc(len);
+                if((body = malloc(len)) == NULL) return;
                 evbuffer_copyout(buffer_body, body, len);
-                printf("\n\tsize_body = %zu body:\n %s\n",len, body);
+                fprintf(stderr,"\tsize_body = %zu body:\n\n %s\n",len, body);
         }
+
+        else
+                fprintf(stderr, "\tlength of body is %zu \n\n",len);
 
         if(body)
                 free(body);
@@ -66,11 +85,13 @@ void print_evbuffer(struct evbuffer* buf)
 #ifndef NDEBUG
         size_t len;
         char *body = NULL;
+
         len = evbuffer_get_length(buf);
+
         if(len > 0) {
-                body = malloc(len);
+                if((body = malloc(len)) == NULL) return;
                 evbuffer_copyout(buf, body, len);
-                printf("\n\tsize_evbuffer = %zu evbuffer:\n %s\n",len, body);
+                fprintf(stderr,"\n\tsize_evbuffer = %zu evbuffer:\n %s\n",len, body);
         }
 
         if(body)
@@ -129,30 +150,38 @@ int copy_request_parameters(struct evhttp_request *old_req,
         }
 
         kv = headers_old_req->tqh_first;
+
         while (kv) {
+
                 if(evhttp_add_header(headers_new_req, kv->key, kv->value) != 0){
                         debug_msg("evhttp_add_header error! header: %s value: %s\n",
                                         kv->key, kv->value);
                         return -1;
                 }
+
                 kv = kv->next.tqe_next;
         }
+
         if(evbuffer_add_buffer(buffer_body_old_req, buffer_body_new_req) != 0) {
                 debug_msg("Couldn't copy buffer_body \n");
                 return -1;
         }
+
         return 0;
 }
 
-int copy_request_only_headers(struct evkeyvalq* input, struct evkeyvalq* output)
+int copy_only_request_headers(struct evkeyvalq* input, struct evkeyvalq* output)
 {
         struct evkeyval* kv = output->tqh_first;
+
         while (kv) {
+
                 if(evhttp_add_header(input, kv->key, kv->value) != 0){
                         debug_msg("evhttp_add_header error! header: %s value: %s\n",
                                         kv->key, kv->value);
                         return -1;
                 }
+
                 kv = kv->next.tqe_next;
         }
         return 0;
@@ -176,73 +205,115 @@ int change_header_value(struct evhttp_request* req,
                 default:
                         break;
         }
+
         if(!headers) {
                 debug_msg("Couldn't get headers of req\n");
                 return -1;
         }
 
-        if(evhttp_remove_header(headers, header) != 0) {
-                debug_msg("Couldn't remove header: %s\n", header);
-                return -1;
+        if(evutil_ascii_strncasecmp(
+                evhttp_find_header(headers, header), new_value, strlen(new_value)) != 0) {
+        
+                if(evhttp_remove_header(headers, header) != 0) {
+                        debug_msg("Couldn't remove header: %s\n", header);
+                        return -1;
+                }
+
+                if(evhttp_add_header(headers, header, new_value) != 0) {
+                        debug_msg("Couldn't add header: %s with value: %s\n",
+                                header, new_value);
+                        return -1;
+                }
         }
-        if(evhttp_add_header(headers, header, new_value) != 0) {
-                debug_msg("Couldn't add header: %s with value: %s\n",
-                        header, new_value);
-                return -1;
-        }
+
         return 0;
 }
 
-/*
-void http_handler_cb(struct evhttp_request* req, void* ctx)
+
+/* create Session ID, put it to Set-Cookie header of proxy
+ * and save SID to hashmap */
+static void proxy_add_cookie(req_proxy_to_server_t * proxy_req)
 {
-        printf("http_handler_cb !!!!!!!!!!!!!!!!!!!!!\n");
-        printf("http_handler_cb !!!!!!!!!!!!!!!!!!!!!\n");
-        printf("http_handler_cb !!!!!!!!!!!!!!!!!!!!!\n");
-        printf("http_handler_cb !!!!!!!!!!!!!!!!!!!!!\n");
+        debug_msg("TODO: need check exist or not and save SID to hashmap !!! \n");
+        extern http_proxy_core_t *proxy_core; 
+        const char *SID;
+        const char *hash;
+        session_t *session;
+        
+        if(!proxy_core)
+                return;
+        if(!proxy_core->SIDs)
+                return;
+        
+        if(!proxy_req)
+                return;
 
-        struct evkeyvalq* output_headers;
-        struct evkeyvalq* input_headers;
-        output_headers = evhttp_request_get_output_headers(req);
-        input_headers = evhttp_request_get_input_headers(req);
+        if((hash = get_hash_of_client(proxy_req)) == NULL)
+                return;
 
-        print_input_req(req);
+        if((session = ht_get_value(proxy_core->SIDs, hash)) != NULL) /* already exist */
+                return;
 
-        printf("out header = %s in header = %s\n", 
-                evhttp_find_header(output_headers, "Host"), 
-                evhttp_find_header(input_headers, "Host"));
+        if((SID = session_create_id()) != NULL) {
+                size_t cookie_length = MAX_SID_LENGTH + strlen(DEFAULT_SID_NAME) + 1; /* +1 for sign '=' */
+                char cookie[cookie_length]; 
+                memset(cookie, '\0', cookie_length);
+                evutil_snprintf(cookie, cookie_length, "%s=%s", session_create_name(), SID);
+                evhttp_add_header(evhttp_request_get_output_headers(proxy_req->req_client_to_proxy), "Set-Cookie", cookie);
+        }
 
-//        printf("out buffer = \n %s in buffer = \n %s\n", 
-                
-        if(evhttp_request_get_connection(req) != NULL) {
-                char *address = NULL;
-                ev_uint16_t port = 0;
-                evhttp_connection_get_peer(evhttp_request_get_connection(req), &address ,&port);
-                printf("CONNECTION NOT NULL!!!\n");
-                printf("\t evhttp_connection_get_peer address = %s port = %d \n",
-                        address, port);
+        session = malloc(sizeof(session_t));
+        session->SID = SID;
+}
 
-                printf("0_______________________\n");
-                struct sockaddr_in *addr_in = (struct sockaddr_in *)evhttp_connection_get_addr(evhttp_request_get_connection(req));
-                printf("1_______________________\n");
-                char *s = inet_ntoa(addr_in->sin_addr);
-                printf("2_______________________\n");
-                if(s)
-                        printf("IP address: TRUE\n");
-                else
-                        printf("IP address: NULL\n");
+/* send reply from proxy to client */
+void proxy_send_reply(req_proxy_to_server_t * proxy_req)
+{
+        if(!proxy_req)
+                return;
 
+        struct evkeyvalq *proxy_headers_output_reply = evhttp_request_get_output_headers(proxy_req->req_client_to_proxy);
 
-                s = malloc(INET_ADDRSTRLEN);
-                inet_ntop(AF_INET, &(addr_in->sin_addr), s, INET_ADDRSTRLEN);
-                printf("IP address: %s \n", s);
+        copy_only_request_headers(proxy_headers_output_reply,
+                                        evhttp_request_get_input_headers(proxy_req->req_proxy_to_server));
 
+        proxy_add_cookie(proxy_req);
 
+        /* handle a chunked reply */
+        const char *value = evhttp_find_header(proxy_headers_output_reply,"Transfer-Encoding");
 
+        if(value && (evutil_ascii_strncasecmp(value, "chunked", 7) == 0)) {
+
+                debug_msg("TODO: !!!!! Correctly process sending chunked reply !!!!!\n");
+
+                evhttp_send_reply_start(proxy_req->req_client_to_proxy, 
+                                evhttp_request_get_response_code(proxy_req->req_proxy_to_server),
+                                evhttp_request_get_response_code_line(proxy_req->req_proxy_to_server));
+
+                evhttp_send_reply_chunk(proxy_req->req_client_to_proxy,
+                                evhttp_request_get_input_buffer(proxy_req->req_proxy_to_server));
+
+                evhttp_send_reply_end(proxy_req->req_client_to_proxy);
         }
         else
-                printf("CONNECTION is NULL!!!\n");
+                evhttp_send_reply(proxy_req->req_client_to_proxy, evhttp_request_get_response_code(proxy_req->req_proxy_to_server),
+                                evhttp_request_get_response_code_line(proxy_req->req_proxy_to_server),
+                                evhttp_request_get_input_buffer(proxy_req->req_proxy_to_server));
 
-        evhttp_send_error(req, 500, "Internal Error");
+
+
+
+        debug_msg("App->Proxy RESP:");
+        print_input_req(proxy_req->req_proxy_to_server);
+
+        debug_msg("Proxy->Browser RESP:");
+        print_output_req(proxy_req->req_client_to_proxy);
+       
 }
-*/
+
+/* send 403 reply and close connection */
+void proxy_send_403_reply(struct evhttp_request* req)
+{
+        change_header_value(req, input, "Connection", "close");
+        evhttp_send_reply(req, 403,"Forbidden", NULL);
+}
