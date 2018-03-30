@@ -5,12 +5,14 @@
 #ifndef HASHMAP_H
 #define HASHMAP_H
 
+#include "struct.h"
+
 typedef struct entry_s entry_t;
 typedef struct hashtable_s hashtable_t;
 
 struct entry_s {
-        char *key;
-        void *value;
+        const char *key;
+	base_t *value;
         struct entry_s *prev, *next;
 };
 
@@ -23,7 +25,7 @@ struct hashtable_s {
 /* Create a new hashtable. */
 hashtable_t *ht_create(int size);
 
-int ht_is_empty(hashtable_t *hashtable);
+int ht_is_not_empty(hashtable_t *hashtable);
 
 /* Insert a key-value pair into a hash table. 
  * return:
@@ -32,14 +34,17 @@ int ht_is_empty(hashtable_t *hashtable);
  *              1 if key alredy exist,
  *              2 if hashtable is full 
  */
-int ht_add(hashtable_t *hashtable, char *key, void *value);
+int ht_add(hashtable_t *hashtable, const char *key, base_t *value);
 
-/* Remove a key-value pair from a hash table. */
-/* Return 0 on success, -1 on failure */
+/* Remove a key-value pair from a hash table and deallocate resources.
+ * Return 0 on success, -1 on failure */
 int ht_remove(hashtable_t *hashtable, const char *key);
 
-/* Get a value of key from hashtable */
-void *ht_get_value(hashtable_t *hashtable, const char *key);
+/* 
+ * Get a value of key from hashtable 
+ * Return NULL on failure ar pointer on value 
+ */
+base_t *ht_get_value(hashtable_t *hashtable, const char *key);
 
 /* Return size of table */
 int ht_get_size(hashtable_t *hashtable);

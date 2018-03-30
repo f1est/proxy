@@ -21,6 +21,9 @@ int config_get_UID();
 int config_get_GID();
 void config_check_core_module(); 
 void config_get_http_server_timeout(int*);
+int config_get_max_length_of_cookie();
+int config_get_max_num_of_cookies();
+int config_get_expires_of_cookie();
 
 
 

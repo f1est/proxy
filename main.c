@@ -96,16 +96,8 @@ int main(int argc, char **argv)
         
         process_cmdline(argc, argv);
         
-        if(use_daemon) {
+        if(use_daemon) 
                 daemonize(argv[0]);
-/*
-                if(daemon(0,0) < 0 ){
-                        fprintf (stderr,
-                                 "start daemon error: %s\n", strerror (errno));
-                        exit (EXIT_FAILURE);
-                }
-*/
-        }
                 
         base = event_base_new();
         if (!base) {

@@ -7,10 +7,12 @@
 #include "utils.h"
 #include "session.h"
 #include "hashmap.h"
+#include "times.h"
+#include "config.h"
 
 #include <event2/keyvalq_struct.h>
 
-
+/* for debugging */
 static void print_headers(struct evhttp_request *req, enum route_of_headers route)
 {
 #ifndef NDEBUG
@@ -56,7 +58,6 @@ static void print_headers(struct evhttp_request *req, enum route_of_headers rout
 
         len = evbuffer_get_length(buffer_body);
 
-        debug_msg(" length of evbuffer = %zu", len);
         if(len > 0) {
                 if((body = malloc(len)) == NULL) return;
                 evbuffer_copyout(buffer_body, body, len);
@@ -80,6 +81,7 @@ void print_output_req(struct evhttp_request* req)
         print_headers(req,output);
 }
 
+/* for debugging */
 void print_evbuffer(struct evbuffer* buf)
 {
 #ifndef NDEBUG
@@ -229,16 +231,14 @@ int change_header_value(struct evhttp_request* req,
         return 0;
 }
 
-
 /* create Session ID, put it to Set-Cookie header of proxy
  * and save SID to hashmap */
-static void proxy_add_cookie(req_proxy_to_server_t * proxy_req)
+static void proxy_add_cookie(req_proxy_to_server_t *proxy_req)
 {
-        debug_msg("TODO: need check exist or not and save SID to hashmap !!! \n");
         extern http_proxy_core_t *proxy_core; 
-        const char *SID;
-        const char *hash;
-        session_t *session;
+        extern int use_ssl;        /* boolean */
+        char SID[MAX_SID_LENGTH];
+        session_t *session = NULL;
         
         if(!proxy_core)
                 return;
@@ -248,22 +248,61 @@ static void proxy_add_cookie(req_proxy_to_server_t * proxy_req)
         if(!proxy_req)
                 return;
 
-        if((hash = get_hash_of_client(proxy_req)) == NULL)
+        if(proxy_req->hasSID != 0)
                 return;
 
-        if((session = ht_get_value(proxy_core->SIDs, hash)) != NULL) /* already exist */
-                return;
+        if((session_create_id(proxy_req, SID)) > 0) {
+                
+                size_t buff_len = sizeof(HTTP_TIME_FORMAT);
+                size_t expires_len = sizeof("Expires=") + buff_len;
+                char buf[buff_len];
+                char expires[expires_len];
+                size_t cookie_length = MAX_SID_LENGTH 
+                                        + strlen(DEFAULT_SID_NAME) 
+                                        + strlen("; Path=/")
+                                        + strlen("; Secure")
+                                        + strlen("; HttpOnly")
+                                        + expires_len 
+                                        + 4; /* +4 for signs '=', ';' (for Expires) and two ' ' (spases) */
+                char cookie[cookie_length];
+                struct timeval tv;
+                int expires_time = config_get_expires_of_cookie();
+                
+                if(expires_time == -1)
+                        expires_time = EXPIRES_OF_COOKIES;
+                expires_time *= 60; /* transfer to seconds */
 
-        if((SID = session_create_id()) != NULL) {
-                size_t cookie_length = MAX_SID_LENGTH + strlen(DEFAULT_SID_NAME) + 1; /* +1 for sign '=' */
-                char cookie[cookie_length]; 
                 memset(cookie, '\0', cookie_length);
-                evutil_snprintf(cookie, cookie_length, "%s=%s", session_create_name(), SID);
+                memset(expires, '\0', expires_len);
+                memset(buf, '\0', buff_len);
+                
+                if(gettimeofday(&tv, NULL) !=0)
+                        debug_msg("Couldn't get time of day. Error: %s", strerror(errno));
+
+                tv.tv_sec += expires_time;
+                get_http_cookie_expires_str(buf, buff_len, &tv.tv_sec);
+                strncat(expires, "Expires=", 8); 
+                strncat(expires, buf, buff_len); 
+                
+                if(use_ssl)
+                        evutil_snprintf(cookie, cookie_length, "%s=%s; %s; %s", session_create_name(), SID, expires, "Path=/; Secure; HttpOnly");
+
+                else
+                        evutil_snprintf(cookie, cookie_length, "%s=%s; %s; %s", session_create_name(), SID, expires, "Path=/; HttpOnly");
+
                 evhttp_add_header(evhttp_request_get_output_headers(proxy_req->req_client_to_proxy), "Set-Cookie", cookie);
+                
+                session = st_session_t_init();
+                session->expires = tv.tv_sec;
+
+                if(ht_add(proxy_core->SIDs, SID, (base_t*)session) == 0) {
+                        debug_msg("New cookie added to hashtable");
+                        ht_print_table(proxy_core->SIDs);
+                }
         }
 
-        session = malloc(sizeof(session_t));
-        session->SID = SID;
+        if(session)
+                st_data_free((base_t*)session);
 }
 
 /* send reply from proxy to client */
@@ -272,12 +311,15 @@ void proxy_send_reply(req_proxy_to_server_t * proxy_req)
         if(!proxy_req)
                 return;
 
+        /* create headers of reply */
         struct evkeyvalq *proxy_headers_output_reply = evhttp_request_get_output_headers(proxy_req->req_client_to_proxy);
 
         copy_only_request_headers(proxy_headers_output_reply,
                                         evhttp_request_get_input_headers(proxy_req->req_proxy_to_server));
 
-        proxy_add_cookie(proxy_req);
+        /* add SID */
+        if(proxy_req->hasSID == 0)
+                proxy_add_cookie(proxy_req);
 
         /* handle a chunked reply */
         const char *value = evhttp_find_header(proxy_headers_output_reply,"Transfer-Encoding");
@@ -299,7 +341,6 @@ void proxy_send_reply(req_proxy_to_server_t * proxy_req)
                 evhttp_send_reply(proxy_req->req_client_to_proxy, evhttp_request_get_response_code(proxy_req->req_proxy_to_server),
                                 evhttp_request_get_response_code_line(proxy_req->req_proxy_to_server),
                                 evhttp_request_get_input_buffer(proxy_req->req_proxy_to_server));
-
 
 
 

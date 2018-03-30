@@ -10,34 +10,13 @@
 #include "log.h"
 #include "hashmap.h"
 #include "transport.h"
-
-#define HASH_LENGTH 18
-
-typedef struct session_s session_t;
-struct session_s {
-        
-        /* Session ID */
-        const char *SID;
-};
-
-/* generate random/pseudorandom 
- * here device:
- * 1. /dev/random  should be used for long lived GPG/SSL/SSH keys.
- * 2. /dev/urandom should be used in other cases (pseudorandom).
- * If arg 'device' is NULL - enable the default value /dev/urandom
- * return 0 on success, -1 on filure.
- */
-
-//int get_random_bytes(void *bytes, size_t size, const char * device);
-
-//size_t bin_to_readable(unsigned char *in, size_t inlen, char *out, char nbits);
+#include "struct.h"
 
 /* 
  * create Session ID 
- * return value needs to be deallocated by the caller if necessary.
- * return SID-string on succes, or NULL on failure 
+ * return length of SID on succes, or -1 on failure 
  */ 
-const char *session_create_id();
+int session_create_id(req_proxy_to_server_t *proxy_req, char *SID);
 
 /*
  * create cookie-name
@@ -47,8 +26,7 @@ const char *session_create_name();
 
 /* 
  * return 0 if header Cookie not exist 
- * return -1 if Cookie-header exist, but it have not SID. In this case,
- * will be send 403-reply and close connection/
+ * return -1 if Cookie-header exist, but it have not SID. 
  * return 1 if Cookie-header exist and it have SID
  */ 
 int cookie_check(struct evhttp_request *req_client_to_proxy);
@@ -59,14 +37,14 @@ int cookie_check(struct evhttp_request *req_client_to_proxy);
  * return value needs to be deallocated by the caller.
  * if @param cut_key not NULL, it will be cut
  */
-const char *cookie_get_all_pairs_as_string(hashtable_t *hashtable, const char *cut_key);
+const char *_cookie_get_all_pairs_as_string(hashtable_t *hashtable, const char *cut_key);
 
 /* 
- * return hash for peer connection and User-agent header of client on success
- * return NULL on failure 
- * return value needs to be deallocated by the caller.
+ * check existence of a SID, and it not empty!
+ * on success return pointer to value of SID (i.e. after SID=)
+ * return NULL on fail
  */
-const char *get_hash_of_client(req_proxy_to_server_t *proxy_req);
+const char *cookie_check_SID(struct evhttp_request* req);
 
 /* 
  * check existence the SID in hashtable of SID's and 
@@ -74,4 +52,11 @@ const char *get_hash_of_client(req_proxy_to_server_t *proxy_req);
  * return -1 on failure, 0 on success
  */
 int check_valid_SID(req_proxy_to_server_t * proxy_req);
+
+/* 
+ * remove session from hashtable and dealloca resources
+ * when there will be an event 
+ */
+void clean_session_when_expired_cb(int sock, short which, void *arg); 
+
 #endif /* SESSION_H */

@@ -89,15 +89,15 @@ void daemonize(const char* program_name)
 
         if (lfp < 0) {
                 /* can not open */
-                syslog(LOG_WARNING, "WARNING: Couldn't open pid_file: %s\n",PID_file_name); 
-                syslog(LOG_WARNING, "WARNING: Perhaps you do not have enough privileges\n"); 
+                syslog(LOG_WARNING, "Couldn't open pid_file: %s\n",PID_file_name); 
+                syslog(LOG_WARNING, "Perhaps you do not have enough privileges\n"); 
                 exit(EXIT_FAILURE);
         }
 
         if (lockf(lfp,F_TLOCK,0) < 0) { 
                 /* can not lock */
-                syslog(LOG_WARNING, "WARNING: Couldn't lock pid_file: %s\n",PID_file_name); 
-                syslog(LOG_WARNING, "WARNING: Server already running!\n"); 
+                syslog(LOG_WARNING, "Couldn't lock pid_file: %s\n",PID_file_name); 
+                syslog(LOG_WARNING, "Server already running!\n"); 
                 exit(EXIT_FAILURE);
         }
 

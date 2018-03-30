@@ -199,7 +199,32 @@ void config_get_http_server_timeout(int* timeout)
                 syslog(LOG_INFO, "http_server_timeout is '%d' \n", *timeout);
 }
 
+int config_get_max_length_of_cookie()
+{
+        int length = -1;
+        if(!config_lookup_int(&cfg, "max_length_of_cookie", &length)) {
+                syslog(LOG_INFO, "Could not find 'max_length_of_cookie' setting in configuration file! max_length_of_cookie will be default = %d\n", MAX_LENGTH_OF_COOKIE);
+                return -1;
+        }
+        return length;
+}
 
+int config_get_max_num_of_cookies()
+{
+        int num = -1;
+        if(!config_lookup_int(&cfg, "max_num_of_cookies", &num)) {
+                syslog(LOG_INFO, "Could not find 'max_num_of_cookies' setting in configuration file! max_num_of_cookies will be default = %d\n", MAX_NUM_OF_COOKIES);
+                return -1;
+        }
+        return num;
+}
 
-
-
+int config_get_expires_of_cookie()
+{
+        int num = -1;
+        if(!config_lookup_int(&cfg, "expires_of_cookie", &num)) {
+                syslog(LOG_INFO, "Could not find 'expires_of_cookie' setting in configuration file! expires_of_cookie will be default = %d\n", EXPIRES_OF_COOKIES);
+                return -1;
+        }
+        return num;
+}

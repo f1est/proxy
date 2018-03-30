@@ -4,10 +4,9 @@
  
 #include "session.h"
 #include "transport.h"
+#include "parser.h"
 
-
-#define EXTRA_RAND_BYTES 60
-#define MAX_RANDOM_BYTES_LENGTH 256
+#define SOURCE_OF_PSEUDORANDOM "/dev/urandom"
 
 /* 
  * generate pseudorandom 
@@ -18,10 +17,10 @@ static int get_random_bytes(void *data, size_t size)
 
         FILE *fp;
         size_t cnt = 0;
-        fp = fopen("/dev/urandom", "r");
+        fp = fopen(SOURCE_OF_PSEUDORANDOM, "r");
         
         if(!fp) {
-                debug_msg("Couldn't open '%s'. Error: %s\n", "/dev/urandom", strerror(errno));
+                debug_msg("Couldn't open '%s'. Error: %s\n", SOURCE_OF_PSEUDORANDOM, strerror(errno));
                 return -1;
         }
         
@@ -32,67 +31,19 @@ static int get_random_bytes(void *data, size_t size)
 
         fclose(fp);
         return 0;
-
-/*
-        size_t  read_bytes = 0;
-        ssize_t n;
-        int     fd = -1;
-        struct  stat st;
-
-        if(!device)
-                device = "/dev/urandom";
-
-        if(strncmp(device, "/dev/random", 11) != 0) {
-                if(strncmp(device, "/dev/urandom", 12)) != 0) {
-                        debug_msg("device can be only random number source devices");
-                        return -1;
-                }
-        }
-
-        fd = open(device, O_RDONLY);
-        
-        if (fd < 0) {
-                debug_msg(" Couldn't read '%s'. Error: %s\n", device, strerror(errno));
-                return -1;
-        }
-        
-        // Does the file exist and is it a character device? 
-        if (fstat(fd, &st) != 0 ||
-# ifdef S_ISNAM
-                !(S_ISNAM(st.st_mode) || S_ISCHR(st.st_mode))
-# else
-                !S_ISCHR(st.st_mode)
-# endif
-                ) {
-                close(fd);
-                return -1;
-        }
-        
-        for (read_bytes = 0; read_bytes < size; read_bytes += (size_t) n) {
-                n = read(fd, bytes + read_bytes, size - read_bytes);
-                if (n <= 0) {
-                        break;
-                }
-        }
-        
-        if (read_bytes < size) {
-                debug_msg("Could not gather sufficient random data\n");
-                close(fd);
-                return -1;
-        }
-
-        close(fd);
-        return 0;
-*/      
 }
 
-static void bin_to_readable(const void *in, char *out, size_t size)
+static void bin_to_readable(const void *in, char *out, size_t size, req_proxy_to_server_t *proxy_req)
 {
         EVP_MD_CTX *mdctx;
         const EVP_MD *md;
         char tmp[] = "\0\0";
         unsigned char md_value[EVP_MAX_MD_SIZE];
         unsigned int md_len, i;
+        const char *user_agent;
+
+        user_agent = evhttp_find_header(evhttp_request_get_input_headers(proxy_req->req_client_to_proxy), "User-Agent");
+        
         
         OpenSSL_add_all_digests();
         
@@ -105,8 +56,12 @@ static void bin_to_readable(const void *in, char *out, size_t size)
         
         mdctx = EVP_MD_CTX_create();
         EVP_DigestInit_ex(mdctx, md, NULL);
-//        EVP_DigestUpdate(mdctx, in, sizeof(in));
         EVP_DigestUpdate(mdctx, in, strlen(in));
+
+        /* add a sources of entropy */
+        EVP_DigestUpdate(mdctx, SOURCE_OF_PSEUDORANDOM, sizeof(SOURCE_OF_PSEUDORANDOM));
+        EVP_DigestUpdate(mdctx, user_agent, strlen(user_agent));
+
         EVP_DigestFinal_ex(mdctx, md_value, &md_len);
         EVP_MD_CTX_destroy(mdctx);
         for(i = 0; (i < md_len) && (strlen(out) < size); i++) {
@@ -116,85 +71,25 @@ static void bin_to_readable(const void *in, char *out, size_t size)
 }
 
 /* 
- * return hash for peer connection and User-agent header of client on success
- * return NULL on failure 
- * return value needs to be deallocated by the caller.
- */
-const char *get_hash_of_client(req_proxy_to_server_t *proxy_req)
-{
-        EVP_MD_CTX *mdctx;
-        const EVP_MD *md;
-        char tmp[] = "\0\0";
-        unsigned char md_value[EVP_MAX_MD_SIZE];
-        unsigned int md_len, i;
-        char *hash;
-        char *address = NULL;
-        ev_uint16_t port = 0;
-        const char *user_agent;
-
-        evhttp_connection_get_peer(evhttp_request_get_connection(proxy_req->req_client_to_proxy), &address ,&port);
-
-        user_agent = evhttp_find_header(evhttp_request_get_input_headers(proxy_req->req_client_to_proxy), "User-Agent");
-        
-        if(!address || !user_agent)
-                return NULL;
-
-        if((hash = malloc(HASH_LENGTH)) == NULL)
-                return NULL;
-        
-        memset(hash, '\0', HASH_LENGTH);
-
-        OpenSSL_add_all_digests();
-        
-        md = EVP_sha1();
-        
-        if(!md) {
-                debug_msg("Unknown message digest");
-                return NULL;
-        }
-        
-        mdctx = EVP_MD_CTX_create();
-        EVP_DigestInit_ex(mdctx, md, NULL);
-        EVP_DigestUpdate(mdctx, address, strlen(address));
-        EVP_DigestUpdate(mdctx, user_agent, strlen(user_agent));
-        EVP_DigestFinal_ex(mdctx, md_value, &md_len);
-        EVP_MD_CTX_destroy(mdctx);
-        for(i = 0; (i < md_len) && (strlen(hash) < HASH_LENGTH-2); i++) {
-                sprintf(tmp, "%02x", md_value[i]);
-                strncat(hash, tmp, 2);
-        }
-
-debug_msg("!!!!!!!!!!!! hash = %s", hash);
-        if(strlen(hash) > 0)
-                return hash;
-        return NULL;
-}
-
-/* 
- * create Session ID (cookie-value)
- * return value needs to be deallocated by the caller if necessary.
- * return SID-string on succes or NULL on failure 
+ * create Session ID 
+ * return length of SID on succes, or -1 on failure 
  */ 
-const char *session_create_id()
+int session_create_id(req_proxy_to_server_t *proxy_req, char *SID)
 {
 	unsigned char rbuf[MAX_RANDOM_BYTES_LENGTH + EXTRA_RAND_BYTES];
-	char *outid = malloc(MAX_SID_LENGTH);
+        int res;
 
-        if(!outid) return NULL;
-
-        memset(outid, '\0', MAX_SID_LENGTH);
+        memset(SID, '\0', MAX_SID_LENGTH);
         
-        if (get_random_bytes(rbuf, MAX_RANDOM_BYTES_LENGTH) != 0) {
-		return NULL;
-	}
-	bin_to_readable(rbuf, outid, (MAX_SID_LENGTH) - 2);
+        if (get_random_bytes(rbuf, MAX_RANDOM_BYTES_LENGTH) != 0) 
+		return -1;
+	
+        bin_to_readable(rbuf, SID, (MAX_SID_LENGTH) - 2, proxy_req);
 
-        if(strlen(outid) > 0)
-                return outid;
-        else {
-                free((void*)outid);
-                return NULL;
-        }
+        if((res = strlen(SID)) > 0)
+                return res;
+        else 
+                return -1;
 }
 
 
@@ -209,8 +104,7 @@ const char *session_create_name()
 
 /* 
  * return 0 if header Cookie not exist 
- * return -1 if Cookie-header exist, but it have not SID. In this case,
- * will be send 403-reply and close connection/
+ * return -1 if Cookie-header exist, but it have not SID. 
  * return 1 if Cookie-header exist and it have SID
  */ 
 int cookie_check(struct evhttp_request *req_client_to_proxy)
@@ -234,7 +128,7 @@ int cookie_check(struct evhttp_request *req_client_to_proxy)
  * return value needs to be deallocated by the caller. 
  * if @param cut_key not NULL, it will be cut
  */
-const char *cookie_get_all_pairs_as_string(hashtable_t *hashtable, const char * cut_key)
+const char *_cookie_get_all_pairs_as_string(hashtable_t *hashtable, const char * cut_key)
 {
 #define SIZE_OF_STRING_ALL_ENTRIES 128
         char *str;
@@ -253,7 +147,7 @@ const char *cookie_get_all_pairs_as_string(hashtable_t *hashtable, const char * 
                 if((hashtable_entry = ht_get_entry_on_index(hashtable, i)) != NULL) {
 
                         size_t tmp_size = 0;
-                        
+
                         /* cutting cut_key */
                         if(cut_key) {
                                tmp_size = strlen(cut_key);
@@ -262,10 +156,14 @@ const char *cookie_get_all_pairs_as_string(hashtable_t *hashtable, const char * 
                                }
                         }
 
+
+                                
                         tmp_size = strlen(str) + 
                                         strlen(hashtable_entry->key) +
-                                        strlen((char*)hashtable_entry->value) + 
                                         strlen(";") + strlen("=");
+                        
+                        if(hashtable_entry->value->type == type_string)
+                                tmp_size += strlen(((string_t *)hashtable_entry->value)->str);
 
                         if(tmp_size > size_str) {
                                 size_str += tmp_size;
@@ -273,7 +171,8 @@ const char *cookie_get_all_pairs_as_string(hashtable_t *hashtable, const char * 
                         }
 
                         if((tmp_size = strlen(hashtable_entry->key)) == 0) {
-                                free((void*)str);
+                                if(str)
+                                        free((void*)str);
                                 return NULL;
                         }
                         
@@ -282,14 +181,59 @@ const char *cookie_get_all_pairs_as_string(hashtable_t *hashtable, const char * 
                                 
                         strncat(str, hashtable_entry->key, tmp_size);
                         
-                        if((tmp_size = strlen((char *)hashtable_entry->value)) != 0) {
-                                strncat(str, "=", 1);
-                                strncat(str, (char *)hashtable_entry->value, tmp_size);
+                        if(hashtable_entry->value->type == type_string) {
+
+                                if((tmp_size = strlen(((string_t *)hashtable_entry->value)->str)) != 0) {
+                                        strncat(str, "=", 1);
+                                        strncat(str, ((string_t *)hashtable_entry->value)->str, tmp_size);
+                                }
                         }
                 }
         }
 
         return str;
+}
+
+/* 
+ * check existence of a SID, and it not empty!
+ * on success return pointer to value of SID (i.e. after SID=)
+ * return NULL on fail
+ */
+const char *cookie_check_SID(struct evhttp_request* req)
+{
+        const char *cookie_value;
+        const char *SID;
+        int default_length_SID_name;
+        
+        cookie_value = evhttp_find_header(evhttp_request_get_input_headers(req),"Cookie");
+        if(cookie_value == NULL)
+                return NULL;
+
+        SID = strstr(cookie_value, DEFAULT_SID_NAME);
+        if(SID == NULL)
+                return NULL;
+
+        default_length_SID_name = strlen(DEFAULT_SID_NAME);
+        
+        /* cut DEFAULT_SID_NAME from SID. -1 because the '=' sign must also be cut off */
+        while(default_length_SID_name != -1) {
+                
+                if(check_end_of_string(*SID) == 1)                        
+                        return NULL;
+                
+                SID++;
+                default_length_SID_name--;
+        }
+
+        /* check if SID is empty (i.e. Cookie: SID=\r\n ) */
+        if(check_end_of_string(*SID) == 1)  
+                return NULL;
+
+        /* check if SID is empty (i.e. Cookie: SID=; OtherSID=value) */
+        if(!isxdigit(*SID)) 
+                return NULL;
+
+        return SID;
 }
 
 /* 
@@ -303,7 +247,6 @@ int check_valid_SID(req_proxy_to_server_t * proxy_req)
         session_t *session;
         
         const char *SID_value;
-        const char *hash;
         
         if(!proxy_core)
                 return -1;
@@ -317,28 +260,37 @@ int check_valid_SID(req_proxy_to_server_t * proxy_req)
         if(!proxy_req->cookies_tbl)
                 return -1;
         
-        if((SID_value = ht_get_value(proxy_req->cookies_tbl, DEFAULT_SID_NAME)) == NULL)
+        if((SID_value = st_string_t_get_str((string_t*)ht_get_value(proxy_req->cookies_tbl, DEFAULT_SID_NAME))) == NULL)
                 return -1;
        
-        if((hash = get_hash_of_client(proxy_req)) == NULL)
+        if((session = (session_t*)ht_get_value(proxy_core->SIDs, SID_value)) == NULL) 
                 return -1;
-
-        if((session = ht_get_value(proxy_core->SIDs, hash)) == NULL) {
-                if(hash)
-                        free((void *) hash);
-                return -1;
-        }
 
         if(strlen(SID_value) > 0 &&
                 strlen(SID_value) == strlen(session->SID) &&
                 strncmp((SID_value), session->SID, strlen(session->SID)) == 0) {
-                if(hash)
-                        free((void *) hash);
+
+                debug_msg("SID for this host is valid");
                 return 0;
         }
 
-        if(hash)
-                free((void *) hash);
-
         return 1;
 }
+
+/* 
+ * remove session from hashtable and dealloca resources
+ * when there will be an event 
+ */
+void clean_session_when_expired_cb(int sock, short which, void *arg) 
+{
+        extern struct http_proxy_core_s *proxy_core;
+        const char * key = (const char*)arg;
+
+        debug_msg("Session for key = '%s' expired", key);
+        syslog(LOG_INFO, "Session for key = '%s' expired\n", key);
+
+        if(ht_remove(proxy_core->SIDs, key) < 0) 
+                syslog(LOG_WARNING, "couldn't remove this key from hashtable");
+}
+
+

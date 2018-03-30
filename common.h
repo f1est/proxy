@@ -39,13 +39,21 @@
 
 //#define _POSIX_C_SOURCE 1
 
-/* Define boolean values */
-#ifndef FALSE
-# define FALSE 0
-# define TRUE (!FALSE)
-#endif
+#define MAX_OUTPUT (512*1024)
+#define MAX_LENGTH_HOSTNAME INET6_ADDRSTRLEN+7 // +7 is ':' + length of port(max 5) + \0
+
+#define EXTRA_RAND_BYTES 60
+#define MAX_RANDOM_BYTES_LENGTH 256
 
 #define DEFAULT_SID_NAME "SID"
-#define MAX_SID_LENGTH EVP_MAX_MD_SIZE/2
+#define MAX_SID_LENGTH EVP_MAX_MD_SIZE+2
+#define MAX_LENGTH_OF_COOKIE    4096      /* https://tools.ietf.org/html/rfc6265#section-6.1 */
+#define MAX_NUM_OF_COOKIES      100
+#define HASH_LENGTH MAX_SID_LENGTH //EVP_MAX_MD_SIZE 
+#define HTTP_TIME_FORMAT "Wed, 02 Sep 1981 07:30:00 GMT"
+#define EXPIRES_OF_COOKIES 60   /* minutes */
+
+/* for debug*/
+#define DEBUG_HASHTABLE
 
 #endif /* COMMON_H */
