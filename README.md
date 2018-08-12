@@ -39,7 +39,7 @@ make
 
 пример запуска:
 ```sh
-./embediProxy -d -c test/example.cfg
+./embediProxy -d -c conf/example.cfg
 ```
 
 ## Конфиг файл
