@@ -6,7 +6,7 @@ git clone https://github.com/f1est/proxy.git --recurse-submodules
 ## Зависимости
 Для сборки проекта, потребуются следующие библиотеки:
 
-- libevent      (wget https://github.com/libevent/libevent/releases/download/release-2.1.8-stable/libevent-2.1.8-stable.tar.gz)
+- libevent      (git clone https://github.com/libevent/libevent.git)
 - libconfig     (git clone https://github.com/hyperrealm/libconfig.git)
 - openssl       (wget https://www.openssl.org/source/openssl-1.0.2l.tar.gz)
 
