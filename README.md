@@ -13,7 +13,9 @@ git clone https://github.com/f1est/proxy.git --recurse-submodules
 
 ## Установка
 Чтобы не тянуть с собой libevent, собираем проект с этой библиотекой статикой. Для этого в Makefile исправить следующие строки:
+
 LIBEVENT_PATH = /путь/к/архивам/ libevent_openssl.a и libevent.a
+
 LIBEVENT_INCLUDE_PATH = /путь/к/заголовочным/файлам/ libevent
 
 далее выполнить команду:
@@ -33,7 +35,7 @@ make
         -h        Display this usage information.
 ```
 
-конфиг файл лежит в директории test/example.cfg
+конфиг файл лежит в директории conf/example.cfg
 
 пример запуска:
 ```sh
@@ -65,6 +67,6 @@ make
 
 **max_num_of_cookies**      - максимальное количество кук в запросе (Принимаемое значение integer)
 
-**expires_of_cookie**       - время жизни куки ((Принимаемое значение integer)
+**expires_of_cookie**       - время жизни куки (Принимаемое значение integer)
 
 
