@@ -1,11 +1,13 @@
 /*
- * @author f1est 
+ * 	 @author 	 f1est 
+ * 	 telegram: 	 @F1estas (https://t.me/F1estas) 
+ * 	 e-mail: 	 www-b@mail.ru 
  */
  
 #include "hashmap.h"
 #include "log.h"
 
-static int delete_oldest_session(hashtable_t *hashtable, entry_t **last);
+static int delete_oldest_session(hashtable_t *hashtable, entry_t **last, entry_t **next);
 
 int ht_is_not_empty(hashtable_t *hashtable)
 {
@@ -161,7 +163,7 @@ int ht_add(hashtable_t *hashtable, const char *key, base_t *value)
 #ifdef DEBUG_HASHTABLE
                                 debug_msg("hashtable is FULL!!! Will be removed outdated session");
 #endif
-                                delete_oldest_session(hashtable, &last);
+                                delete_oldest_session(hashtable, &last, &next);
                         }
                         else {
 #ifdef DEBUG_HASHTABLE
@@ -201,7 +203,7 @@ int ht_add(hashtable_t *hashtable, const char *key, base_t *value)
                                 
                                 if(next != NULL) {
                                         newpair->next = next->next;
-                                        next->prev = newpair;
+                                        next->prev = last;
                                 }
                                 else 
                                         newpair->next = NULL;
@@ -265,6 +267,8 @@ static entry_t *ht_get_pair(hashtable_t *hashtable, const char *key)
                         && (strlen(key) > 0
                         && strncmp(key, pair->key, strlen(key)) != 0)) 
                 pair = pair->next;
+
+
         
 
         /* Did we actually find anything? */
@@ -297,36 +301,47 @@ base_t *ht_get_value(hashtable_t *hashtable, const char *key)
 /* Find and return the table in hashtable */
 static entry_t **ht_find_table(hashtable_t * hashtable, const char *key)
 {
-        int i = hashtable->size - 1;
+        int i = 0;
 
-        while(i >= 0) {
+        while(i < hashtable->size) {
                 if(hashtable->table[i] != NULL && hashtable->table[i]->key != NULL 
                         && (strlen(hashtable->table[i]->key) > 0
                         && strncmp(hashtable->table[i]->key, key, strlen(hashtable->table[i]->key)) == 0))
                         return &hashtable->table[i];
-                i--;
+                i++;
         }
 
         debug_msg("key '%s' not found!\n", key);
         return NULL;
 }
 
-static int ht_remove_entry(entry_t *entry, entry_t **last)
+static int ht_remove_entry(entry_t *entry, entry_t **last, entry_t **next)
 {
         if(!entry)
                 return -1;
 
-        if (entry->prev)
-                entry->prev->next = entry->next;
-        if (entry->next)
-                entry->next->prev = entry->prev;
 
+        if (entry->prev) 
+                entry->prev->next = entry->next;
+        
+        if (entry->next) 
+                entry->next->prev = entry->prev;
+        
         entry->prev = NULL;
         entry->next = NULL;
 
 #ifdef DEBUG_HASHTABLE
         debug_msg("Remove key-value pair with key: %s ", entry->key);
 #endif
+        if(last != NULL 
+                && *last != NULL 
+                && *last == entry)
+                *last = NULL;
+        
+        if(next != NULL
+                && *next != NULL
+                && *next == entry)
+                *next = NULL;
 
         free ((void*)entry->key);
         entry->key = NULL;
@@ -337,8 +352,6 @@ static int ht_remove_entry(entry_t *entry, entry_t **last)
         free (entry);
         entry = NULL;
 
-        if(last)
-                *last = NULL;
         
         return 0;
 }
@@ -350,7 +363,7 @@ int ht_remove(hashtable_t *hashtable, const char *key)
         int res;
         entry_t **entry = ht_find_table(hashtable, key);
        
-        if((res = ht_remove_entry(*entry, NULL)) == 0)
+        if((res = ht_remove_entry(*entry, NULL, NULL)) == 0)
                 hashtable->count_elems--;
 
         *entry = NULL;
@@ -367,10 +380,10 @@ int ht_remove(hashtable_t *hashtable, const char *key)
  * Delete row from hashtable with oldest session. 
  * Return 0 on success, -1 on failure 
  */
-static int delete_oldest_session(hashtable_t *hashtable, entry_t **last)
+static int delete_oldest_session(hashtable_t *hashtable, entry_t **last, entry_t **next)
 {
         int i = 0; 
-        time_t oldest;
+        struct timeval oldest;
         int res;
         int remove_index;
         
@@ -378,7 +391,8 @@ static int delete_oldest_session(hashtable_t *hashtable, entry_t **last)
         while(i < hashtable->size) {
                 if(hashtable->table[i]) {
                         if(hashtable->table[i]->value->type == type_session) {
-                                oldest = ((session_t *)hashtable->table[i]->value)->expires;
+                                oldest.tv_sec = ((session_t *)hashtable->table[i]->value)->expires.tv_sec;
+                                oldest.tv_usec = ((session_t *)hashtable->table[i]->value)->expires.tv_usec;
                                 remove_index = i;
                                 break;
                         }
@@ -390,16 +404,25 @@ static int delete_oldest_session(hashtable_t *hashtable, entry_t **last)
         while(i < hashtable->size) {
                 if(hashtable->table[i]) {
                         if(hashtable->table[i]->value->type == type_session) {
-                                if(oldest > ((session_t *)hashtable->table[i]->value)->expires) {
-                                        oldest = ((session_t *)hashtable->table[i]->value)->expires;
+                                
+                                if(oldest.tv_sec > ((session_t *)hashtable->table[i]->value)->expires.tv_sec) {
+                                        oldest.tv_sec = ((session_t *)hashtable->table[i]->value)->expires.tv_sec;
+                                        oldest.tv_usec = ((session_t *)hashtable->table[i]->value)->expires.tv_usec;
                                         remove_index = i;
+
+                                } else if(oldest.tv_sec == ((session_t *)hashtable->table[i]->value)->expires.tv_sec) {
+
+                                        if(oldest.tv_usec > ((session_t *)hashtable->table[i]->value)->expires.tv_usec) {
+                                                oldest.tv_usec = ((session_t *)hashtable->table[i]->value)->expires.tv_usec;
+                                                remove_index = i;
+                                        }
                                 }
                         }
                 }
                 i++;
         }
         
-        if((res = ht_remove_entry(hashtable->table[remove_index], last)) == 0)
+        if((res = ht_remove_entry(hashtable->table[remove_index], last, next)) == 0)
                 hashtable->count_elems--;
 
         hashtable->table[remove_index] = NULL;
@@ -422,6 +445,9 @@ void ht_free(hashtable_t *hashtable)
                 if(hashtable->table[i]) {
 
                         if(hashtable->table[i]->key) {
+#ifndef NDEBUG
+                                debug_msg(" will be delete a key: %s", hashtable->table[i]->key);
+#endif
                                 free((void*)hashtable->table[i]->key);
                                 hashtable->table[i]->key = NULL;
                         }
@@ -464,9 +490,26 @@ void ht_print_table(hashtable_t *hashtable)
                 if(hashtable->table[i]) {
                         
                         if(hashtable->table[i]->key) 
-                                fprintf(stderr, "\t '%s'\t", hashtable->table[i]->key); 
+                                fprintf(stderr, "'%s'\t", hashtable->table[i]->key); 
                         
-                        if(hashtable->table[i]->value) 
+                        if(hashtable->table[i]->value
+                                && hashtable->table[i]->value->type == type_session) {
+                                fprintf(stderr, "tv_sec = %ld", ((session_t*)hashtable->table[i]->value)->expires.tv_sec);
+                                fprintf(stderr, " tv_usec = %ld", ((session_t*)hashtable->table[i]->value)->expires.tv_usec);
+
+                                fprintf(stderr, "\t table_ptr = %p", hashtable->table[i]);
+
+                                if(hashtable->table[i]->prev != NULL)
+                                        fprintf(stderr, "\t table_prev_ptr = %p", hashtable->table[i]->prev);
+                                else 
+                                        fprintf(stderr, "\t table_prev_ptr = NULL");
+                        
+                                if(hashtable->table[i]->next != NULL)
+                                        fprintf(stderr, "\t table_next_ptr = %p\n", hashtable->table[i]->next);
+                                else 
+                                        fprintf(stderr, "\t table_next_ptr = NULL\n");
+                        }
+                        else
                                 st_print(hashtable->table[i]->value);
                 }
                 i++;

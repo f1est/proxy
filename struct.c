@@ -1,10 +1,13 @@
 /*
- * @author f1est 
+ * 	 @author 	 f1est 
+ * 	 telegram: 	 @F1estas (https://t.me/F1estas) 
+ * 	 e-mail: 	 www-b@mail.ru 
  */
  
 #include "struct.h"
 #include "config.h"
 #include "session.h"
+#include "common.h"
 
 void session_add_expires_event(session_t *session, const char *key) 
 {
@@ -71,10 +74,14 @@ base_t *fn_data_clone(base_t *this)
                         if(sess->SID)
                                 new_sess->SID = strdup(sess->SID);
                         
+                        if(sess->expires_str)
+                                new_sess->expires_str = strdup(sess->expires_str);
+
                         if(sess->base.clone)
                                 new_sess->base.clone = sess->base.clone;
 
-                        new_sess->expires = sess->expires;
+                        new_sess->expires.tv_sec = sess->expires.tv_sec;
+                        new_sess->expires.tv_usec = sess->expires.tv_usec;
                         
                         if(sess->base.free_content)
                                 new_sess->base.free_content = sess->base.free_content;
@@ -98,7 +105,7 @@ void fn_content_free(base_t *this)
                         string_t *str = (string_t *)this;   
 
                         if(str->str)
-                                free(str->str);
+                                free((void*)str->str);
 
                         str->str = NULL;
                         break;
@@ -111,7 +118,12 @@ void fn_content_free(base_t *this)
                         session_t *sess = (session_t *)this;    
 
                         sess->SID = NULL;
-                        sess->expires = 0;
+
+                        if(sess->expires_str)
+                                free((void*)sess->expires_str);
+
+                        sess->expires.tv_sec = 0;
+                        sess->expires.tv_usec = 0;
 
                         if(sess->cleanup)
                                 event_free(sess->cleanup);
@@ -150,7 +162,7 @@ void st_string_t_init(string_t *data, char * str)
         data->str = str;
 }
 
-char *st_string_t_get_str(string_t * str)
+const char *st_string_t_get_str(string_t * str)
 {
         if(str)
                 return str->str;
@@ -169,10 +181,35 @@ session_t *st_session_t_init()
         new_sess->base.type = type_session;
         new_sess->SID = NULL;
         new_sess->cleanup = NULL;
+        new_sess->expires_str = NULL;
+        new_sess->expires.tv_sec = 0;
+        new_sess->expires.tv_usec = 0;
         new_sess->base.clone = &fn_data_clone;
         new_sess->base.free_content = &fn_content_free;
 
         return new_sess;
+}
+
+/* return -1 on failure or 0 on success */
+int st_session_t_add_expires_str(session_t *session, const char *expires_str)
+{
+        if(session == NULL)
+                return -1;
+
+        if(expires_str == NULL)
+                return -1;
+debug_msg("expires_str = %s", expires_str);
+        if(strlen(expires_str) > 0) {
+
+                if(session->expires_str != NULL) 
+                        free((void*)expires_str);
+
+                session->expires_str = strdup(expires_str);
+debug_msg("session->expires_str = %s", session->expires_str);
+                return 0;
+        }
+
+        return -1;
 }
 
 void st_data_free(base_t *this)

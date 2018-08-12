@@ -1,5 +1,7 @@
 /*
- * @author f1est 
+ * 	 @author 	 f1est 
+ * 	 telegram: 	 @F1estas (https://t.me/F1estas) 
+ * 	 e-mail: 	 www-b@mail.ru 
  */
  
 #include "common.h"
@@ -23,7 +25,7 @@ int use_ssl = 0;        /* boolean */
 int use_core_webtoolkit = 0;        /* boolean */
 int backlog = -1;
 
-struct http_proxy_core_s *proxy_core = NULL;
+http_proxy_core_t *proxy_core = NULL;
 struct event_base *base = NULL;
 
 static void syntax(const char* program_name)
@@ -84,12 +86,13 @@ int main(int argc, char **argv)
         int socklen;
 
         struct evconnlistener *listener;
-
+        
+        fprintf(stderr, "Libevent version: %s \n" , event_get_version());
 #ifndef NDEBUG
-        printf(" ################### DEBUG \n");
+        fprintf(stderr," ################### DEBUG \n");
         set_logfile(stderr);
 #else
-        printf(" ################### NDEBUG \n");
+        fprintf(stderr," ################### NDEBUG \n");
 #endif
 
 
@@ -161,7 +164,7 @@ int main(int argc, char **argv)
                 return 1;
         }
         if(use_core_webtoolkit) {
-                proxy_core = http_request_init(listener);
+                proxy_core = http_core_init(listener);
                 if(proxy_core == NULL) {
                         fprintf(stderr, "Couldn't create http server.\n");
                         evconnlistener_free(listener);
@@ -172,7 +175,6 @@ int main(int argc, char **argv)
                 }
         }
 
-
         event_base_dispatch(base);
 
 EXIT:
@@ -180,7 +182,7 @@ EXIT:
                 free_proxy_core(proxy_core);
         else if(listener)
                 evconnlistener_free(listener);
-        
+
         event_base_free(base);
 
         free_config();

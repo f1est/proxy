@@ -1,5 +1,7 @@
 /*
- * @author f1est 
+ * 	 @author 	 f1est 
+ * 	 telegram: 	 @F1estas (https://t.me/F1estas) 
+ * 	 e-mail: 	 www-b@mail.ru 
  */
  
 #ifndef LOG_H

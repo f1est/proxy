@@ -1,0 +1,6 @@
+[submodule "libs/libconfig"]
+	path = libs/libconfig
+	url = https://github.com/hyperrealm/libconfig.git
+[submodule "libs/libevent"]
+	path = libs/libevent
+	url = https://github.com/libevent/libevent.git

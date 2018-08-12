@@ -1,5 +1,7 @@
 /*
- * @author f1est 
+ * 	 @author 	 f1est 
+ * 	 telegram: 	 @F1estas (https://t.me/F1estas) 
+ * 	 e-mail: 	 www-b@mail.ru 
  */
  
 #include "session.h"
@@ -99,13 +101,13 @@ int session_create_id(req_proxy_to_server_t *proxy_req, char *SID)
  */
 const char *session_create_name()
 {
-        return DEFAULT_SID_NAME;
+        return DEFAULT_EMBEDI_SID_NAME;
 }
 
 /* 
  * return 0 if header Cookie not exist 
- * return -1 if Cookie-header exist, but it have not SID. 
- * return 1 if Cookie-header exist and it have SID
+ * return -1 if Cookie-header exist, but it have not EmbediSID. 
+ * return 1 if Cookie-header exist and it have EmbediSID
  */ 
 int cookie_check(struct evhttp_request *req_client_to_proxy)
 {
@@ -115,8 +117,8 @@ int cookie_check(struct evhttp_request *req_client_to_proxy)
         if(!evhttp_find_header(evhttp_request_get_input_headers(req_client_to_proxy),"Cookie"))        
                 return 0;
         
-        /* check if SID not exist in Cookie-header */
-        if(cookie_check_SID(req_client_to_proxy) == NULL)   
+        /* check if EmbediSID not exist in Cookie-header */
+        if(cookie_check_EmbediSID(req_client_to_proxy) == NULL)   
                 return -1;
         
         return 1;      
@@ -124,7 +126,8 @@ int cookie_check(struct evhttp_request *req_client_to_proxy)
 
 /*
  * concatenate and return string of all pairs of cookies
- * return NULL on fail
+ * Return NULL on fail, return pointer on new allocated string. 
+ * Because in this function used malloc and realloc,
  * return value needs to be deallocated by the caller. 
  * if @param cut_key not NULL, it will be cut
  */
@@ -134,6 +137,7 @@ const char *_cookie_get_all_pairs_as_string(hashtable_t *hashtable, const char *
         char *str;
         entry_t *hashtable_entry = NULL;
         size_t size_str = SIZE_OF_STRING_ALL_ENTRIES;
+        size_t i;
         if(hashtable == NULL)
                 return NULL;
 
@@ -142,7 +146,7 @@ const char *_cookie_get_all_pairs_as_string(hashtable_t *hashtable, const char *
 
         memset(str, '\0', size_str);
 
-        for(size_t i = 0; i < ht_get_size(hashtable); i++) {
+        for(i = 0; i < ht_get_size(hashtable); i++) {
 
                 if((hashtable_entry = ht_get_entry_on_index(hashtable, i)) != NULL) {
 
@@ -150,9 +154,10 @@ const char *_cookie_get_all_pairs_as_string(hashtable_t *hashtable, const char *
 
                         /* cutting cut_key */
                         if(cut_key) {
-                               tmp_size = strlen(cut_key);
-                               if(strncmp(hashtable_entry->key, cut_key, tmp_size > 0 ? tmp_size : strlen(hashtable_entry->key)) == 0) {
-                                       continue;
+                               if((tmp_size = strlen(cut_key)) > 0) {
+                                       if(strncmp(hashtable_entry->key, cut_key, tmp_size) == 0) {
+                                               continue;
+                                       }
                                }
                         }
 
@@ -195,41 +200,41 @@ const char *_cookie_get_all_pairs_as_string(hashtable_t *hashtable, const char *
 }
 
 /* 
- * check existence of a SID, and it not empty!
- * on success return pointer to value of SID (i.e. after SID=)
+ * check existence of a EmbediSID, and it not empty!
+ * on success return pointer to value of EmbediSID (i.e. after EmbediSID=)
  * return NULL on fail
  */
-const char *cookie_check_SID(struct evhttp_request* req)
+const char *cookie_check_EmbediSID(struct evhttp_request* req)
 {
         const char *cookie_value;
         const char *SID;
-        int default_length_SID_name;
+        int default_length_EmbediSID_name;
         
         cookie_value = evhttp_find_header(evhttp_request_get_input_headers(req),"Cookie");
         if(cookie_value == NULL)
                 return NULL;
 
-        SID = strstr(cookie_value, DEFAULT_SID_NAME);
+        SID = strstr(cookie_value, DEFAULT_EMBEDI_SID_NAME);
         if(SID == NULL)
                 return NULL;
 
-        default_length_SID_name = strlen(DEFAULT_SID_NAME);
+        default_length_EmbediSID_name = strlen(DEFAULT_EMBEDI_SID_NAME);
         
-        /* cut DEFAULT_SID_NAME from SID. -1 because the '=' sign must also be cut off */
-        while(default_length_SID_name != -1) {
+        /* cut DEFAULT_EMBEDI_SID_NAME from SID. -1 because the '=' sign must also be cut off */
+        while(default_length_EmbediSID_name != -1) {
                 
                 if(check_end_of_string(*SID) == 1)                        
                         return NULL;
                 
                 SID++;
-                default_length_SID_name--;
+                default_length_EmbediSID_name--;
         }
 
-        /* check if SID is empty (i.e. Cookie: SID=\r\n ) */
+        /* check if SID is empty (i.e. Cookie: EmbediSID=\r\n ) */
         if(check_end_of_string(*SID) == 1)  
                 return NULL;
 
-        /* check if SID is empty (i.e. Cookie: SID=; OtherSID=value) */
+        /* check if SID is empty (i.e. Cookie: EmbediSID=; OtherSID=value) */
         if(!isxdigit(*SID)) 
                 return NULL;
 
@@ -237,11 +242,11 @@ const char *cookie_check_SID(struct evhttp_request* req)
 }
 
 /* 
- * check existence the SID in hashtable of SID's and 
+ * check existence the EmbediSID in hashtable of SID's and 
  * check the validity it and to belong to IP-address and User-agent of client
  * return -1 on failure, 0 on success
  */
-int check_valid_SID(req_proxy_to_server_t * proxy_req)
+int check_valid_EmbediSID(req_proxy_to_server_t * proxy_req)
 {
         extern http_proxy_core_t *proxy_core; 
         session_t *session;
@@ -260,7 +265,7 @@ int check_valid_SID(req_proxy_to_server_t * proxy_req)
         if(!proxy_req->cookies_tbl)
                 return -1;
         
-        if((SID_value = st_string_t_get_str((string_t*)ht_get_value(proxy_req->cookies_tbl, DEFAULT_SID_NAME))) == NULL)
+        if((SID_value = st_string_t_get_str((string_t*)ht_get_value(proxy_req->cookies_tbl, DEFAULT_EMBEDI_SID_NAME))) == NULL)
                 return -1;
        
         if((session = (session_t*)ht_get_value(proxy_core->SIDs, SID_value)) == NULL) 
@@ -270,7 +275,7 @@ int check_valid_SID(req_proxy_to_server_t * proxy_req)
                 strlen(SID_value) == strlen(session->SID) &&
                 strncmp((SID_value), session->SID, strlen(session->SID)) == 0) {
 
-                debug_msg("SID for this host is valid");
+                debug_msg("EmbediSID for this host is valid");
                 return 0;
         }
 
@@ -283,14 +288,12 @@ int check_valid_SID(req_proxy_to_server_t * proxy_req)
  */
 void clean_session_when_expired_cb(int sock, short which, void *arg) 
 {
-        extern struct http_proxy_core_s *proxy_core;
+        extern http_proxy_core_t *proxy_core;
         const char * key = (const char*)arg;
 
         debug_msg("Session for key = '%s' expired", key);
-        syslog(LOG_INFO, "Session for key = '%s' expired\n", key);
 
-        if(ht_remove(proxy_core->SIDs, key) < 0) 
-                syslog(LOG_WARNING, "couldn't remove this key from hashtable");
+        ht_remove(proxy_core->SIDs, key); 
 }
 
 

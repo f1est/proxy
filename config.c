@@ -1,5 +1,7 @@
 /*
- * @author f1est 
+ * 	 @author 	 f1est 
+ * 	 telegram: 	 @F1estas (https://t.me/F1estas) 
+ * 	 e-mail: 	 www-b@mail.ru 
  */
  
 
@@ -227,4 +229,17 @@ int config_get_expires_of_cookie()
                 return -1;
         }
         return num;
+}
+
+const char* config_get_json_sec_headers_file_name()
+{
+        const char *file_name;
+        if(!config_lookup_string(&cfg, "sec_headers_file", &file_name)) {
+                syslog(LOG_INFO, "Could not find 'sec_headers_file' setting in configuration file.\n");
+                return DEFAULT_SEC_HEADERS_FILE_NAME;
+        }
+        else {        
+                syslog(LOG_INFO, "sec_headers_file is '%s' \n",file_name);
+                return file_name;
+        }
 }

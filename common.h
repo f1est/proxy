@@ -1,5 +1,7 @@
 /*
- * @author f1est 
+ * 	 @author 	 f1est 
+ * 	 telegram: 	 @F1estas (https://t.me/F1estas) 
+ * 	 e-mail: 	 www-b@mail.ru 
  */
  
 #ifndef COMMON_H
@@ -28,6 +30,7 @@
 #include <event2/util.h>
 #include <event2/http.h>
 #include <event2/http_struct.h>
+#include <event2/event.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -45,7 +48,7 @@
 #define EXTRA_RAND_BYTES 60
 #define MAX_RANDOM_BYTES_LENGTH 256
 
-#define DEFAULT_SID_NAME "SID"
+#define DEFAULT_EMBEDI_SID_NAME "EmbediSID"
 #define MAX_SID_LENGTH EVP_MAX_MD_SIZE+2
 #define MAX_LENGTH_OF_COOKIE    4096      /* https://tools.ietf.org/html/rfc6265#section-6.1 */
 #define MAX_NUM_OF_COOKIES      100

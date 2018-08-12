@@ -1,5 +1,7 @@
 /*
- * @author f1est 
+ * 	 @author 	 f1est 
+ * 	 telegram: 	 @F1estas (https://t.me/F1estas) 
+ * 	 e-mail: 	 www-b@mail.ru 
  */
  
 #ifndef SESSION_H
@@ -26,32 +28,33 @@ const char *session_create_name();
 
 /* 
  * return 0 if header Cookie not exist 
- * return -1 if Cookie-header exist, but it have not SID. 
- * return 1 if Cookie-header exist and it have SID
+ * return -1 if Cookie-header exist, but it have not EmbediSID. 
+ * return 1 if Cookie-header exist and it have EmbediSID
  */ 
 int cookie_check(struct evhttp_request *req_client_to_proxy);
 
 /*
  * concatenate and return string of all pairs of cookies
- * return NULL on fail
- * return value needs to be deallocated by the caller.
+ * Return NULL on fail, return pointer on new allocated string. 
+ * Because in this function used malloc and realloc,
+ * return value needs to be deallocated by the caller. 
  * if @param cut_key not NULL, it will be cut
  */
 const char *_cookie_get_all_pairs_as_string(hashtable_t *hashtable, const char *cut_key);
 
 /* 
- * check existence of a SID, and it not empty!
- * on success return pointer to value of SID (i.e. after SID=)
+ * check existence of a EmbediSID, and it not empty!
+ * on success return pointer to value of EmbediSID (i.e. after EmbediSID=)
  * return NULL on fail
  */
-const char *cookie_check_SID(struct evhttp_request* req);
+const char *cookie_check_EmbediSID(struct evhttp_request* req);
 
 /* 
- * check existence the SID in hashtable of SID's and 
+ * check existence the EmbediSID in hashtable of SID's and 
  * check the validity it and to belong to IP-address and User-agent of client
  * return -1 on failure, 0 on success
  */
-int check_valid_SID(req_proxy_to_server_t * proxy_req);
+int check_valid_EmbediSID(req_proxy_to_server_t * proxy_req);
 
 /* 
  * remove session from hashtable and dealloca resources
