@@ -27,9 +27,8 @@ int check_end_of_string(char c)
  * on success return pointer on new allocated hashtable.
  * Return value needs to be deallocated by the caller 
  */
-static hashtable_t *_parse_header(struct evhttp_request* req, enum route_of_headers route_req, const char * header)
+static hashtable_t *_parse_header(const char *hdr)
 {
-        const char *hdr;
         char *cpy;
         char *pos;
         char *sce;
@@ -41,23 +40,10 @@ static hashtable_t *_parse_header(struct evhttp_request* req, enum route_of_head
         int count_pairs = 0;
         int length_cookie_value;
         hashtable_t *cookies_tbl;
-        struct evkeyvalq *headers;
         string_t data;
         int max_num_of_cookies = -1;
         int max_length_of_cookie = -1;
 
-        switch(route_req) {
-                case input:
-                        headers = evhttp_request_get_input_headers(req);
-                        break;
-                case output:
-                        headers = evhttp_request_get_output_headers(req);
-                        break;
-                default:
-                        break;
-        }
-
-        hdr = evhttp_find_header(headers, header);
         if (hdr == NULL)
                 return NULL;
                 
@@ -181,12 +167,12 @@ static hashtable_t *_parse_header(struct evhttp_request* req, enum route_of_head
         return cookies_tbl;
 }
 
-hashtable_t *_parse_cookie_header(struct evhttp_request* req, enum route_of_headers route_req)
+hashtable_t *_parse_cookie_header(const char *header_value)
 {
-        return _parse_header(req, route_req, "Cookie");
+        return _parse_header(header_value);
 }
 
-hashtable_t *_parse_set_cookie_header(struct evhttp_request* req, enum route_of_headers route_req)
+hashtable_t *_parse_set_cookie_header(const char *header_value)
 {
-        return _parse_header(req, route_req, "Set-Cookie");
+        return _parse_header(header_value);
 }

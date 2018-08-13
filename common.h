@@ -48,7 +48,7 @@
 #define EXTRA_RAND_BYTES 60
 #define MAX_RANDOM_BYTES_LENGTH 256
 
-#define DEFAULT_EMBEDI_SID_NAME "EmbediSID"
+#define DEFAULT_EMBEDDED_SID_NAME "EmbeddedSID"
 #define MAX_SID_LENGTH EVP_MAX_MD_SIZE+2
 #define MAX_LENGTH_OF_COOKIE    4096      /* https://tools.ietf.org/html/rfc6265#section-6.1 */
 #define MAX_NUM_OF_COOKIES      100

@@ -3,3 +3,5 @@ cheatsheet
 *.o
 proxy
 log
+_cross_compile_fedora.sh
+_cross_compile_debian.sh

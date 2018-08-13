@@ -18,7 +18,7 @@
 /* for debugging */
 static void print_headers(struct evhttp_request *req, enum route_of_headers route)
 {
-#ifndef NDEBUG
+#if !defined(NDEBUG) && !defined(CLANG_SANITIZER)
         struct evkeyvalq *header = NULL;
         struct evkeyval* kv = NULL;
         const char* str_route = NULL;
@@ -27,6 +27,9 @@ static void print_headers(struct evhttp_request *req, enum route_of_headers rout
         char *address = NULL;
         ev_uint16_t port;
         struct evhttp_connection *evcon;
+
+        if(!req)
+                return;
 
         switch(route){
 
@@ -252,7 +255,7 @@ int copy_request_parameters(struct evhttp_request *old_req,
                 kv = kv->next.tqe_next;
         }
 
-        if(evbuffer_add_buffer(buffer_body_old_req, buffer_body_new_req) != 0) {
+        if(evbuffer_add_buffer(buffer_body_new_req, buffer_body_old_req) != 0) {
                 debug_msg("Couldn't copy buffer_body \n");
                 return -1;
         }
@@ -320,9 +323,159 @@ int change_header_value(struct evhttp_request* req,
         return 0;
 }
 
+/* 
+ * check scheme and port
+ * return 1 if scheme and port matched, else return 0. On error return -1.
+ * For example if scheme is https and port == 443, or
+ * if scheme is http and port == 80 will be returned 1,
+ * else will be returned 0
+ */
+int is_matched_scheme_and_port(struct evhttp_uri *uri, int port)
+{
+        const char *value;
+        if(uri == NULL)
+                return -1;
+
+        if((value = evhttp_uri_get_scheme(uri)) != NULL && (
+                /* http and port != 80 */
+                ((strcmp(value, "http") == 0) && port == 80) ||
+                /* https and port != 443 */
+                ((strcmp(value, "https") == 0) && port == 443))) 
+                return 1;
+
+        return 0;
+}
+
+/* 
+ * change host and port in URI 
+ * return 0 on success, -1 on failure
+ */
+int change_URI_host_port(const char *source_uri, 
+                                char* dst_uri, 
+                                size_t dst_len,
+                                const char* host_dst, 
+                                int port_dst)
+{
+
+// TODO: CHECK if source_uri host has host of proxy, then change it in dst_uri
+debug_msg(" !!!!!!!!!!! TODO: CHECK if source_uri host has host of proxy, then change it in dst_uri");
+
+        struct evhttp_uri *parsed_uri;
+        const char *value;
+        int len = dst_len;
+        if(source_uri == NULL || 
+                dst_uri == NULL ||
+                len <= 0 ||
+                host_dst == NULL)
+                return -1;
+
+        parsed_uri = evhttp_uri_parse(source_uri);
+        if(parsed_uri == NULL)
+                return -1;
+
+        /* change host */
+        if(evhttp_uri_get_host(parsed_uri) != NULL) {
+                if(evhttp_uri_set_host(parsed_uri, host_dst) == -1) {
+                        if(parsed_uri != NULL)
+                                evhttp_uri_free(parsed_uri);
+                        return -1;
+                }
+                
+                /* change port */
+                if(evhttp_uri_set_port(parsed_uri, port_dst) == -1) {
+                        if(parsed_uri != NULL)
+                                evhttp_uri_free(parsed_uri);
+                        return -1;
+                }
+        }
+
+
+        /* filling the dst_uri */
+        if((value = evhttp_uri_get_scheme(parsed_uri)) != NULL) {
+                size_t len_val = strlen(value);
+                len -= len_val;
+                len -= 3; // "://"
+                if(len >= 0) {
+                        strncat(dst_uri, value, len_val);
+                        strncat(dst_uri, "://", 3);
+                }
+                value = NULL;
+        }
+
+        if((value = evhttp_uri_get_userinfo(parsed_uri)) != NULL) {
+                size_t len_val = strlen(value);
+                len -= len_val;
+                len -= 1; // '@'
+                if(len >= 0) {
+                        strncat(dst_uri, value, len_val);
+                        strncat(dst_uri, "@", 1);
+                }
+                value = NULL;
+        }
+
+        if((value = evhttp_uri_get_host(parsed_uri)) != NULL) {
+                size_t len_val = strlen(value);
+                len -= len_val;
+                if(len >= 0) {
+                        strncat(dst_uri, value, len_val);
+                }
+                value = NULL;
+        }
+        
+        if(evhttp_uri_get_port(parsed_uri) >= 0) {
+                if(is_matched_scheme_and_port(parsed_uri, port_dst) == 0) {
+                        char str_port[6];
+                        size_t len_port;
+                        memset(str_port, '\0', 6);
+                        sprintf(str_port, "%d", port_dst);
+                        len_port = strlen(str_port);
+                        len -= len_port;
+                        len -= 1; // ':'
+                        if(len >= 0) {
+                                strncat(dst_uri, ":", 1);
+                                strncat(dst_uri, str_port, len_port);
+                        }
+                }
+        }
+
+        if((value = evhttp_uri_get_path(parsed_uri)) != NULL) {
+                size_t len_val = strlen(value);
+                len -= len_val;
+                if(len >= 0) {
+                        strncat(dst_uri, value, len_val);
+                }
+                value = NULL;
+        }
+        
+        
+        if((value = evhttp_uri_get_query(parsed_uri)) != NULL) {
+                size_t len_val = strlen(value);
+                len -= len_val;
+                if(len >= 0) {
+                        strncat(dst_uri, value, len_val);
+                }
+                value = NULL;
+        }
+        
+        if((value = evhttp_uri_get_fragment(parsed_uri)) != NULL) {
+                size_t len_val = strlen(value);
+                len -= len_val;
+                if(len >= 0) {
+                        strncat(dst_uri, value, len_val);
+                }
+                value = NULL;
+        }
+        
+        if(parsed_uri != NULL)
+                evhttp_uri_free(parsed_uri);
+
+        return 0;
+}
+
+
 /* create Session ID, put it to Set-Cookie header of proxy
  * and save SID to hashmap */
-static void proxy_add_Embedi_cookie(req_proxy_to_server_t *proxy_req)
+static void proxy_add_Embedded_cookie(req_proxy_to_server_t *proxy_req)
 {
         extern http_proxy_core_t *proxy_core; 
         extern int use_ssl;        /* boolean */
@@ -347,7 +500,7 @@ static void proxy_add_Embedi_cookie(req_proxy_to_server_t *proxy_req)
                 char buf[buff_len];
                 char expires[expires_len];
                 size_t cookie_length = MAX_SID_LENGTH 
-                                        + strlen(DEFAULT_EMBEDI_SID_NAME) 
+                                        + strlen(DEFAULT_EMBEDDED_SID_NAME) 
                                         + strlen("; Path=/")
                                         + strlen("; Secure")
                                         + strlen("; HttpOnly")
@@ -390,7 +543,7 @@ static void proxy_add_Embedi_cookie(req_proxy_to_server_t *proxy_req)
                         
                         proxy_req->hasSID = ht_get_value(proxy_core->SIDs, SID);
                         
-                        debug_msg("New Embedi-cookie added to hashtable");
+                        debug_msg("New Embedded-cookie added to hashtable");
                         ht_print_table(proxy_core->SIDs);
                 }
 
@@ -403,9 +556,8 @@ static void proxy_add_Embedi_cookie(req_proxy_to_server_t *proxy_req)
 /* create reply for send to client */
 void proxy_create_reply(req_proxy_to_server_t * proxy_req)
 {
-        const char *value;
-        struct bufferevent *bev_serv;
-        struct bufferevent *bev_client;
+        const char *value = NULL;
+	struct evkeyval *header;
 
         if(proxy_req == NULL)
                 return;
@@ -422,52 +574,54 @@ void proxy_create_reply(req_proxy_to_server_t * proxy_req)
         copy_only_request_headers(proxy_headers_output_reply,
                                         evhttp_request_get_input_headers(proxy_req->req_proxy_to_server));
 
-        /* add EmbediSID */
+        /* add EmbeddedSID */
         if(proxy_req->hasSID == NULL)
-                proxy_add_Embedi_cookie(proxy_req);
+                proxy_add_Embedded_cookie(proxy_req);
 
-        /* change a Expires in Set-Cookie-header of reply */
-        value = evhttp_find_header(proxy_headers_output_reply,"Set-Cookie");
+        /* change a Expires in all Set-Cookie-headers of reply */
+//        value = evhttp_find_header(proxy_headers_output_reply,"Set-Cookie");
         
 
 //TODO: FIND and chage ALL headers Set-Cookie !!!
-        debug_msg("TODO: FIND and change ALL headers Set-Cookie !!!");
+//        debug_msg("TODO: FIND and change ALL headers Set-Cookie !!!");
 
-        if(value) {
-                hashtable_t *parsed_set_cookie = _parse_set_cookie_header(proxy_req->req_proxy_to_server, input);
-                base_t *expires = ht_get_value(parsed_set_cookie, "Expires");
-                if(expires != NULL && proxy_req->hasSID != NULL) {
-                        if(expires->type == type_string) {
+        HEAD_FOREACH(header, evhttp_request_get_input_headers(proxy_req->req_proxy_to_server), next) {
+                if(header != NULL && strncmp(header->key, "Set-Cookie", 10) == 0)
+                        value = header->value;
 
-                                if(((string_t*)expires)->str != NULL)
-                                        free((void*)((string_t*)expires)->str);
+                if(value) {
+                        hashtable_t *parsed_set_cookie = _parse_set_cookie_header(value);
 
-                                ((string_t*)expires)->str = ((session_t*)proxy_req->hasSID)->expires_str;
-                                
-                                const char * new_value_set_cookie = _cookie_get_all_pairs_as_string(parsed_set_cookie, NULL);
-
-                                if(new_value_set_cookie != NULL) {
-
-                                        evhttp_remove_header(proxy_headers_output_reply, "Set-Cookie");
-                                        evhttp_add_header(proxy_headers_output_reply, "Set-Cookie", new_value_set_cookie);
-
-                                        free((void*)new_value_set_cookie);
-
+                        if(parsed_set_cookie != NULL) {
+                                base_t *expires = ht_get_value(parsed_set_cookie, "Expires");
+                                if(expires != NULL && proxy_req->hasSID != NULL) {
+                                        if(expires->type == type_string) {
+                
+                                                if(((string_t*)expires)->str != NULL)
+                                                        free((void*)((string_t*)expires)->str);
+                
+                                                ((string_t*)expires)->str = ((session_t*)proxy_req->hasSID)->expires_str;
+                                                
+                                                const char * new_value_set_cookie = _cookie_get_all_pairs_as_string(parsed_set_cookie, NULL);
+                
+                                                if(new_value_set_cookie != NULL) {
+                
+                                                        evhttp_remove_header(proxy_headers_output_reply, "Set-Cookie");
+                                                        evhttp_add_header(proxy_headers_output_reply, "Set-Cookie", new_value_set_cookie);
+                
+                                                        free((void*)new_value_set_cookie);
+                
+                                                }
+                                                ((string_t*)expires)->str = NULL;
+                                        }
                                 }
-                                ((string_t*)expires)->str = NULL;
+                               ht_free(parsed_set_cookie);
                         }
                 }
-                if(parsed_set_cookie != NULL)
-                       ht_free(parsed_set_cookie);
         }
 
         /* add security headers from json-file */
         add_security_headers_to_response(proxy_req);
-}
-
-static void is_JQUERY(int i)
-{
-        debug_msg("%d is /js/jquery-1.11.1.min.js?v=20170519164616 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", i);
 }
 
 /* send reply from proxy to client */
@@ -478,17 +632,12 @@ void proxy_send_reply(req_proxy_to_server_t * proxy_req)
         if(proxy_req->req_proxy_to_server->chunked &&
                 proxy_req->req_client_to_proxy->chunked) { 
                 evhttp_send_reply_end(proxy_req->req_client_to_proxy);
-debug_msg("\t CHUNK END !!!!!!!!!!!!!!!!!!!!!!!!!!!!! END");
         }
 
         /* a not chunked reply */
         else {
                 proxy_create_reply(proxy_req);
 
-if(strstr(evhttp_request_get_uri(proxy_req->req_client_to_proxy),"jquery-1.11.1.min.js")) {
-is_JQUERY(1);
-print_evbuffer(evhttp_request_get_input_buffer(proxy_req->req_proxy_to_server));
-}
                 evhttp_send_reply(proxy_req->req_client_to_proxy, evhttp_request_get_response_code(proxy_req->req_proxy_to_server),
                                 evhttp_request_get_response_code_line(proxy_req->req_proxy_to_server),
                                 evhttp_request_get_input_buffer(proxy_req->req_proxy_to_server));
@@ -502,9 +651,54 @@ print_evbuffer(evhttp_request_get_input_buffer(proxy_req->req_proxy_to_server));
         print_output_req(proxy_req->req_client_to_proxy);
 }
 
+/* Delete all cookies from the query by setting its an expiration date in the past */
+void removeAllCookies(struct evhttp_request* req)
+{
+        hashtable_t *cookies_tbl;
+        const char *value;
+
+        if(req == NULL)
+                return;
+
+        value = evhttp_find_header(evhttp_request_get_input_headers(req), "Cookie");
+        cookies_tbl = _parse_cookie_header(value);
+
+        if(cookies_tbl == NULL)
+                return;
+                
+        for(size_t i = 0; i < cookies_tbl->count_elems; i++){
+
+                entry_t * SID = ht_get_entry_on_index(cookies_tbl, i);
+                if(SID && SID->value->type == type_string) {
+                        size_t len = sizeof("; Expires=") + sizeof(HTTP_TIME_FORMAT);
+                        size_t len_key = strlen(SID->key);
+                        if(len_key <= 0) {
+                                if(cookies_tbl)
+                                        ht_free(cookies_tbl);                            
+                                return;
+                        }
+
+                        char value[len_key + len + 1]; // +1 for sign '=' between SID_key and SID_value
+
+                        memset(value, '\0', len_key + len + 1);
+                        
+                        strncpy(value, SID->key, len_key), 
+                        strncat(value, "=", 1);
+                        strncat(value, "; Expires=", len);
+                        strncat(value, HTTP_TIME_FORMAT, len);
+                        evhttp_add_header(evhttp_request_get_output_headers(req), "Set-Cookie", value);
+                }
+        }
+
+        if(cookies_tbl)
+                ht_free(cookies_tbl);
+}
+
 /* send 403 reply and close connection */
 void proxy_send_403_reply(struct evhttp_request* req)
 {
-        change_header_value(req, input, "Connection", "close");
+        removeAllCookies(req);
+
+        evhttp_add_header(evhttp_request_get_output_headers(req), "Connection", "close");
         evhttp_send_reply(req, 403,"Forbidden", NULL);
 }

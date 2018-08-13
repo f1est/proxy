@@ -26,9 +26,9 @@ make
 ## Запуск
 
 ```sh
-./embediProxy -h
+./embeddedProxy -h
 
- Usage: ./embediProxy [options]
+ Usage: ./embeddedProxy [options]
  Options are:
         -d        Do not daemonize (run in foreground).
         -c FILE   Use an alternate configuration file.
@@ -39,7 +39,7 @@ make
 
 пример запуска:
 ```sh
-./embediProxy -d -c conf/example.cfg
+./embeddedProxy -d -c conf/example.cfg
 ```
 
 ## Конфиг файл

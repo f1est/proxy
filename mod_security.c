@@ -61,7 +61,7 @@ void add_security_headers_to_response(req_proxy_to_server_t *proxy_req)
         }
         else {
                 debug_msg("URI with path: '%s' in json_file NOT FOUND! A set of default headers will be applied ", path);
-                uri = cJSON_GetObjectItemCaseSensitive(proxy_core->json_security_headers, "EMBEDI_DefaultPatternUrl");
+                uri = cJSON_GetObjectItemCaseSensitive(proxy_core->json_security_headers, "EMBEDDED_DefaultPatternUrl");
                 add_headers_for_uri(evhttp_request_get_output_headers(proxy_req->req_client_to_proxy), uri);
         }
 }

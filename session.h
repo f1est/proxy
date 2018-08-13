@@ -28,8 +28,8 @@ const char *session_create_name();
 
 /* 
  * return 0 if header Cookie not exist 
- * return -1 if Cookie-header exist, but it have not EmbediSID. 
- * return 1 if Cookie-header exist and it have EmbediSID
+ * return -1 if Cookie-header exist, but it have not EmbeddedSID. 
+ * return 1 if Cookie-header exist and it have EmbeddedSID
  */ 
 int cookie_check(struct evhttp_request *req_client_to_proxy);
 
@@ -43,18 +43,18 @@ int cookie_check(struct evhttp_request *req_client_to_proxy);
 const char *_cookie_get_all_pairs_as_string(hashtable_t *hashtable, const char *cut_key);
 
 /* 
- * check existence of a EmbediSID, and it not empty!
- * on success return pointer to value of EmbediSID (i.e. after EmbediSID=)
+ * check existence of a EmbeddedSID, and it not empty!
+ * on success return pointer to value of EmbeddedSID (i.e. after EmbeddedSID=)
  * return NULL on fail
  */
-const char *cookie_check_EmbediSID(struct evhttp_request* req);
+const char *cookie_check_EmbeddedSID(struct evhttp_request* req);
 
 /* 
- * check existence the EmbediSID in hashtable of SID's and 
+ * check existence the EmbeddedSID in hashtable of SID's and 
  * check the validity it and to belong to IP-address and User-agent of client
  * return -1 on failure, 0 on success
  */
-int check_valid_EmbediSID(req_proxy_to_server_t * proxy_req);
+int check_valid_EmbeddedSID(req_proxy_to_server_t * proxy_req);
 
 /* 
  * remove session from hashtable and dealloca resources

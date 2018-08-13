@@ -159,7 +159,7 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,struct sockad
         extern SSL_CTX *ssl_ctx;
         extern struct sockaddr_storage connect_to_addr;
         extern int connect_to_addrlen;
-        extern int use_ssl;
+        void *use_ssl = p;
         extern struct event_base *base;
         struct bufferevent *b_in;
         struct bufferevent *b_out;
@@ -167,6 +167,12 @@ void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,struct sockad
 
         if (use_ssl) {
                 SSL *ssl = SSL_new(ssl_ctx);
+                
+                if(ssl == NULL) {
+                        debug_msg("SSL_new filed !!!");
+                        return;
+                }
+
                 b_in = bufferevent_openssl_socket_new(base, fd, ssl, BUFFEREVENT_SSL_ACCEPTING,
                     BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);
                 b_out = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);
@@ -203,13 +209,23 @@ static struct bufferevent * http_accept_cb(struct event_base *base, void * ctx)
 
         if (use_ssl) {
                 SSL *ssl = SSL_new(ssl_ctx);
-                b_in = bufferevent_openssl_socket_new(base, evconnlistener_get_fd(evhttp_bound_socket_get_listener(proxy_core->evhttp_socket)), ssl, BUFFEREVENT_SSL_ACCEPTING, 0);
+
+                if(ssl == NULL) {
+                        debug_msg("SSL_new filed !!!");
+                        return NULL;
+                }
+
+//                b_in = bufferevent_openssl_socket_new(base, evconnlistener_get_fd(evhttp_bound_socket_get_listener(proxy_core->evhttp_socket)), ssl, BUFFEREVENT_SSL_ACCEPTING, 0);
 //                    BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);
 //                    BEV_OPT_CLOSE_ON_FREE);
+                b_in = bufferevent_openssl_socket_new(base, -1, ssl, BUFFEREVENT_SSL_ACCEPTING, BEV_OPT_CLOSE_ON_FREE);
+//                b_in = bufferevent_openssl_socket_new(base, -1, ssl, BUFFEREVENT_SSL_ACCEPTING, 0);
         } else {
 //                b_in = bufferevent_socket_new(base, evconnlistener_get_fd(evhttp_bound_socket_get_listener(proxy_core->evhttp_socket)), BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);
 //                b_in = bufferevent_socket_new(base, evconnlistener_get_fd(evhttp_bound_socket_get_listener(proxy_core->evhttp_socket)), BEV_OPT_CLOSE_ON_FREE);
-                b_in = bufferevent_socket_new(base, evconnlistener_get_fd(evhttp_bound_socket_get_listener(proxy_core->evhttp_socket)), 0);
+//                b_in = bufferevent_socket_new(base, evconnlistener_get_fd(evhttp_bound_socket_get_listener(proxy_core->evhttp_socket)), 0);
+                b_in = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
+//                b_in = bufferevent_socket_new(base, -1, 0);
         }
 
         bufferevent_setcb(b_in, NULL, NULL, eventcb, NULL);
@@ -333,10 +349,6 @@ debug_msg("close_connection_cb !!!!!!!!!!!!!!!!!!!!");
 
 static void write_chunk_on_conn_cb(struct evhttp_connection *evcon, void *arg)
 {
-        debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!write_chunk_on_conn_cb WRITING CHUNK!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-        debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!write_chunk_on_conn_cb WRITING CHUNK!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-        debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!write_chunk_on_conn_cb WRITING CHUNK!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-        debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!write_chunk_on_conn_cb WRITING CHUNK!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
 }
 
 static void http_stream_in_chunk_cb(struct evhttp_request *req, void *arg)
@@ -355,16 +367,7 @@ debug_msg("http_stream_in_chunk_cb !!!!!!!!!!!!!!!!");
 
         if(proxy_req->req_proxy_to_server->chunked &&
                 proxy_req->req_client_to_proxy->chunked) {
-debug_msg("2 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! EV_INT64_MAX = %ld", EV_INT64_MAX);
-debug_msg("2 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! EV_INT32_MAX = %d", EV_INT32_MAX);
-debug_msg("2 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! EV_SSIZE_MAX = %ld", EV_SSIZE_MAX);
-debug_msg("2 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! EV_SIZE_MAX = %ld", EV_SIZE_MAX);
-
-debug_msg("\t CHUNK !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ");
-print_evbuffer(evhttp_request_get_input_buffer(proxy_req->req_proxy_to_server));
         
-//                evhttp_send_reply_chunk(proxy_req->req_client_to_proxy, 
-//                        evhttp_request_get_input_buffer(proxy_req->req_proxy_to_server));
                 evhttp_send_reply_chunk_with_cb(proxy_req->req_client_to_proxy, 
                         evhttp_request_get_input_buffer(proxy_req->req_proxy_to_server),
                         write_chunk_on_conn_cb, NULL);
@@ -392,15 +395,61 @@ debug_msg("http_stream_in_chunk_start_cb !!!!!!!!!!!!!!!! started !!!");
                 evhttp_request_set_chunked_cb(proxy_req->req_proxy_to_server, http_stream_in_chunk_cb);
                 proxy_create_reply(proxy_req);
 
-                evhttp_remove_header(evhttp_request_get_output_headers(proxy_req->req_client_to_proxy),"Transfer-Encoding");
+                if(proxy_req->req_client_to_proxy != NULL && proxy_req->req_proxy_to_server != NULL) {
+                       evhttp_remove_header(evhttp_request_get_output_headers(proxy_req->req_client_to_proxy),"Transfer-Encoding");
 
-                evhttp_send_reply_start(proxy_req->req_client_to_proxy, 
+debug_msg("req_client_to_proxy ptr = %p !!!", proxy_req->req_client_to_proxy);
+debug_msg("req_proxy_to_server ptr = %p !!!", proxy_req->req_proxy_to_server);
+                       evhttp_send_reply_start(proxy_req->req_client_to_proxy, 
                                 evhttp_request_get_response_code(proxy_req->req_proxy_to_server),
                                 evhttp_request_get_response_code_line(proxy_req->req_proxy_to_server));
-                return 0;
+                        return 0;
+                }
+                else {
+
+                        if(proxy_req->req_client_to_proxy == NULL)
+                                debug_msg("req_client_to_proxy is NULL ptr = %p !!!", proxy_req->req_client_to_proxy);
+                        if(proxy_req->req_proxy_to_server == NULL)
+                                debug_msg("req_proxy_to_server is NULL ptr = %p !!!", proxy_req->req_proxy_to_server);
+                        return -1;
+                }
         }
 
         return 0;
+}
+
+/* 
+ * Redirect requests to our proxy from listen_HTTP_addr (from a web-browser) 
+ * to listen_HTTPS_addr 
+ */
+static void http_redirect_request_handler_cb(struct evhttp_request* req_client_to_proxy, void *ctx)
+{
+       
+        http_proxy_core_t *proxy_core = (http_proxy_core_t*)ctx;
+        size_t len;  
+	struct evbuffer *evbuf = evbuffer_new();
+
+
+        if(proxy_core == NULL)
+                return;
+        if(proxy_core->redirect_address == NULL) {
+                syslog(LOG_WARNING, "redirect_address is NULL !!!\n");
+                return;
+        }
+        
+        len = sizeof("https://") + strlen(proxy_core->redirect_address) + 1; /* +1 for root url '/' */
+
+        char redirection[len];
+        memset(redirection, '\0', len);
+
+        evutil_snprintf(redirection, len, "https://%s%c", proxy_core->redirect_address, '/');
+       
+
+        evhttp_add_header(evhttp_request_get_output_headers(req_client_to_proxy), "Location", redirection);
+        evbuffer_add_printf(evbuf, "<html><head></head><body><a href=\"%s\">Moved here</a></body></html>",redirection);
+
+        evhttp_send_reply(req_client_to_proxy, 301, NULL, evbuf);
+        evbuffer_free(evbuf);
 }
 
 /* 
@@ -420,23 +469,12 @@ static void http_request_handler_cb(struct evhttp_request* req_client_to_proxy, 
         int port_connect;
         req_proxy_to_server_t *proxy_req;
         int is_cookie_header = cookie_check(req_client_to_proxy);
+        const char *value;
 
         if((proxy_req = init_struct_req_proxy_to_server()) == NULL) return;
         
         memset(host_port, '\0', MAX_LENGTH_HOSTNAME);
         memset(addrbuf, '\0', strlen(addrbuf));
-
-if(evhttp_find_header(evhttp_request_get_input_headers(req_client_to_proxy), "Transfer-Encoding")) {
-        debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! input request from browser has Transfer-Encoding-header !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-        debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! input request from browser has Transfer-Encoding-header !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-        debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! input request from browser has Transfer-Encoding-header !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-        debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! input request from browser has Transfer-Encoding-header !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-        debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! input request from browser has Transfer-Encoding-header !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-        debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! input request from browser has Transfer-Encoding-header !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-        debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! input request from browser has Transfer-Encoding-header !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-        debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! input request from browser has Transfer-Encoding-header !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-        debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! input request from browser has Transfer-Encoding-header !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-}
 
         proxy_req->req_client_to_proxy = req_client_to_proxy;
         proxy_req->client_conn = evhttp_request_get_connection(proxy_req->req_client_to_proxy);
@@ -468,8 +506,8 @@ if(evhttp_find_header(evhttp_request_get_input_headers(req_client_to_proxy), "Tr
 
         /* create bufferevent for output events to application (connect_to_addr) */
 //        b_out = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE|BEV_OPT_DEFER_CALLBACKS);
-//        b_out = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
-        b_out = bufferevent_socket_new(base, -1, 0);
+        b_out = bufferevent_socket_new(base, -1, BEV_OPT_CLOSE_ON_FREE);
+//        b_out = bufferevent_socket_new(base, -1, 0);
         if(!b_out) {
 		debug_msg("bufferevent_socket_new() failed\n");
                 http_connection_free(proxy_req);
@@ -517,25 +555,26 @@ if(evhttp_find_header(evhttp_request_get_input_headers(req_client_to_proxy), "Tr
                 return;
         }
         
-        /* if Cookie-header exist, but EmbediSID is absent, remove whole header for send to app. 
+        /* if Cookie-header exist, but EmbeddedSID is absent, remove whole header for send to app. 
          * Will be handle this client as a new */
         if(is_cookie_header == -1) {
-                debug_msg("In a Cookie-header not found an EmbediSID! Remove the Cookie-header!");
+                debug_msg("In a Cookie-header not found an EmbeddedSID! Remove the Cookie-header!");
                 evhttp_remove_header(evhttp_request_get_output_headers(proxy_req->req_proxy_to_server), "Cookie");
         }
         
-        /* check and handle EmbediSID, remove it from Cookie-header for send it to app */
+        /* check and handle EmbeddedSID, remove it from Cookie-header for send it to app */
         if(is_cookie_header > 0) {
         
                 /* parsing the Cookie-header and save to hashmap */
-                proxy_req->cookies_tbl = _parse_cookie_header(proxy_req->req_proxy_to_server, output);
+                value = evhttp_find_header(evhttp_request_get_output_headers(proxy_req->req_proxy_to_server), "Cookie");
+                proxy_req->cookies_tbl = _parse_cookie_header(value);
 
                 evhttp_remove_header(evhttp_request_get_output_headers(proxy_req->req_proxy_to_server), "Cookie");
 
                 if(proxy_req->cookies_tbl) {
 
                         const char *all_cookies;
-                        if(check_valid_EmbediSID(proxy_req) != 0) {
+                        if(check_valid_EmbeddedSID(proxy_req) != 0) {
                                 debug_msg("SID in a cookie and in a hashtable not match or not exist!");
                                 proxy_send_403_reply(req_client_to_proxy);
                         
@@ -546,9 +585,9 @@ if(evhttp_find_header(evhttp_request_get_input_headers(req_client_to_proxy), "Tr
                                 return;
                         }
                         
-                        proxy_req->hasSID = ht_get_value(proxy_req->cookies_tbl, DEFAULT_EMBEDI_SID_NAME);
+                        proxy_req->hasSID = ht_get_value(proxy_req->cookies_tbl, DEFAULT_EMBEDDED_SID_NAME);
 
-                        if((all_cookies = _cookie_get_all_pairs_as_string(proxy_req->cookies_tbl, DEFAULT_EMBEDI_SID_NAME)) != NULL &&
+                        if((all_cookies = _cookie_get_all_pairs_as_string(proxy_req->cookies_tbl, DEFAULT_EMBEDDED_SID_NAME)) != NULL &&
                                 strlen(all_cookies) != 0)
                                 evhttp_add_header(evhttp_request_get_output_headers(proxy_req->req_proxy_to_server), "Cookie", all_cookies);
                         else
@@ -558,6 +597,8 @@ if(evhttp_find_header(evhttp_request_get_input_headers(req_client_to_proxy), "Tr
                         if(all_cookies)
                                 free((void *)all_cookies);
                 }
+                
+                value = NULL;
         }
         
         proxy_req->uri = (struct evhttp_uri *)evhttp_request_get_evhttp_uri(req_client_to_proxy);
@@ -593,14 +634,28 @@ if(evhttp_find_header(evhttp_request_get_input_headers(req_client_to_proxy), "Tr
 
         /* concatenate host and port to one string host:port */
         strncpy(host_port, host_connect, MAX_LENGTH_HOSTNAME);
-        strncat(host_port, ":", MAX_LENGTH_HOSTNAME - strlen(host_connect));
-        char str_port[6];
-        memset(str_port, '\0', 6);
-        sprintf(str_port, "%d", port_connect);
-        strncat(host_port, str_port, MAX_LENGTH_HOSTNAME - strlen(host_connect) - 1);
+        if(port_connect != 80 && port_connect != 443) {
+                
+                strncat(host_port, ":", MAX_LENGTH_HOSTNAME - strlen(host_connect));
+                char str_port[6];
+                memset(str_port, '\0', 6);
+                sprintf(str_port, "%d", port_connect);
+                strncat(host_port, str_port, MAX_LENGTH_HOSTNAME - strlen(host_connect) - 1);
+        }
 
         /* change Host-header to an application */
-        change_header_value(proxy_req->req_proxy_to_server, output, "Host", host_port); 
+        change_header_value(proxy_req->req_proxy_to_server, output, "Host", host_port);
+
+        /*change Referer-header to an application*/
+        value = evhttp_find_header(evhttp_request_get_output_headers(proxy_req->req_proxy_to_server),"Referer");
+        if(value != NULL){
+                size_t len_new_uri = strlen(value) + MAX_LENGTH_HOSTNAME;
+                char new_uri[len_new_uri];
+                memset(new_uri, '\0', len_new_uri);
+
+                if(change_URI_host_port(value, new_uri, len_new_uri, host_connect, port_connect) == 0)
+                        change_header_value(proxy_req->req_proxy_to_server, output, "Referer", new_uri);
+        }
        
         /* send new request to an application */
         
@@ -620,12 +675,15 @@ if(evhttp_find_header(evhttp_request_get_input_headers(req_client_to_proxy), "Tr
         print_output_req(proxy_req->req_proxy_to_server);
 }
 
-http_proxy_core_t *http_core_init(struct evconnlistener *listener)
+http_proxy_core_t *http_core_init(struct evconnlistener *listener,
+                                struct evconnlistener *second_listener,
+                                const char* redirect_address)
 {
         extern struct event_base *base;
         extern int backlog;
         int timeout = -1;
         const char *json_file = config_get_json_sec_headers_file_name();
+
 
         http_proxy_core_t *proxy_core = malloc(sizeof(http_proxy_core_t));
 
@@ -668,12 +726,42 @@ http_proxy_core_t *http_core_init(struct evconnlistener *listener)
                 free_proxy_core(proxy_core);
                 return NULL;
         }
-
+        
         proxy_core->SIDs = ht_create(backlog);
 
         if(proxy_core->SIDs == NULL) {
                 free_proxy_core(proxy_core);
                 return NULL;
+        }
+
+        if(second_listener != NULL) {
+                proxy_core->http_server_2 = evhttp_new(base);
+
+                if (proxy_core->http_server_2 == NULL) {
+                        fprintf(stderr, "Couldn't create http server 2.\n");
+                        free_proxy_core(proxy_core);
+                        return NULL;
+                }
+                
+                evhttp_set_gencb(proxy_core->http_server_2, http_redirect_request_handler_cb, proxy_core);
+        
+                if(timeout > 0)
+                        evhttp_set_timeout(proxy_core->http_server_2, timeout);
+                
+                proxy_core->evhttp_socket_2 = evhttp_bind_listener(proxy_core->http_server_2, second_listener);
+
+                if(proxy_core->evhttp_socket_2 == NULL) {
+                        fprintf(stderr, "Couldn't bind evhttp.\n");
+                        free_proxy_core(proxy_core);
+                        return NULL;
+                }
+                
+                proxy_core->redirect_address = redirect_address;
+        }
+        else {
+                proxy_core->http_server_2 = NULL;
+                proxy_core->evhttp_socket_2 = NULL;
+                proxy_core->redirect_address = NULL;
         }
         
         return proxy_core;
@@ -688,6 +776,9 @@ void free_proxy_core(http_proxy_core_t *proxy_core)
 
         if(proxy_core->http_server)
                 evhttp_free(proxy_core->http_server);
+                
+        if(proxy_core->http_server_2)
+                evhttp_free(proxy_core->http_server_2);
                 
         if(proxy_core->SIDs)
                 ht_free(proxy_core->SIDs);

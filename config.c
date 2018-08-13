@@ -61,6 +61,45 @@ void config_get_listen_address(const char **address)
         }
 }
 
+const char* config_get_listen_address_(const char *member)
+{
+        const char *address;
+        config_setting_t *root = NULL;
+        config_setting_t *setting = NULL;
+
+        root = config_root_setting(&cfg);
+        if(!root) {
+                syslog(LOG_INFO, "Could not get 'root' setting in configuration file.\n");
+                return NULL;
+        }
+
+        setting = config_setting_get_member(root, "listen_addresses");
+        if(!setting) {
+                syslog(LOG_INFO, "Could not find 'listen_addresses' setting in configuration file.\n");
+                return NULL;
+        }
+
+        if(!config_setting_lookup_string(setting, member, &address)) {
+                syslog(LOG_INFO, "Could not find '%s' setting in section 'listen_addresses'.\n", member);
+                return NULL;
+
+        }
+        else {        
+                syslog(LOG_INFO, "listen_address_%s is '%s' \n", member, address);
+                return address;
+        }
+}
+
+const char* config_get_listen_address_http()
+{
+        return config_get_listen_address_("http");
+}
+
+const char* config_get_listen_address_https()
+{
+        return config_get_listen_address_("https");
+}
+
 void config_get_connect_address(const char **address)
 {
         if(!config_lookup_string(&cfg, "connect_address", address)) {
@@ -82,21 +121,14 @@ void config_get_backlog(int *backlog)
         }
 }
 
-void config_check_use_ssl(int *use_ssl)
+void config_check_use_ssl()
 {
-        if(!config_lookup_bool(&cfg, "ssl", use_ssl)) {
-//                if(!config_lookup_bool(&cfg, "tls", use_ssl)) {
-                        syslog(LOG_INFO, "Could not find 'ssl' setting in configuration file.\n");
-                        return;
-//                }
-        }
-        else {
-                extern const char *certificate_chain_file;
-                extern const char *private_key_file;
-                if(!config_lookup_string(&cfg, "ssl_certificate_file", &certificate_chain_file) ||
-                        !config_lookup_string(&cfg, "ssl_private_key_file", &private_key_file)) {
+        extern const char *certificate_chain_file;
+        extern const char *private_key_file;
+
+        if(!config_lookup_string(&cfg, "ssl_certificate_file", &certificate_chain_file) ||
+                !config_lookup_string(&cfg, "ssl_private_key_file", &private_key_file)) {
                         syslog(LOG_INFO, "TLS/SSL: Could not find 'ssl_certificate_file' or 'ssl_private_key_file' setting in configuration file.\n");
-                }
         }
 }
 
