@@ -12,7 +12,7 @@ git clone https://github.com/f1est/proxy.git --recurse-submodules
 
 
 ## Установка
-Чтобы не тянуть с собой libevent, собираем проект с этой библиотекой статикой. Для этого в Makefile исправить следующие строки:
+Чтобы не тянуть libevent на целевое устройство, собираем проект с этой библиотекой статикой. Для этого в Makefile исправить следующие строки:
 
 LIBEVENT_PATH = /путь/к/архивам/ libevent_openssl.a и libevent.a
 
