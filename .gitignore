@@ -1,4 +1,5 @@
 .*.swp
+.*.swo
 cheatsheet
 *.o
 proxy
