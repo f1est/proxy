@@ -119,21 +119,8 @@ static void general_signal_cb(evutil_socket_t sig, short events, void *user_data
 {
         struct event_base *base = (struct event_base*) user_data;
 
-        if(sig == SIGPIPE) {
-                debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-                debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-                debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-                debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-                debug_msg("Caught a %d signal; SIGPIPE!!!!\n", sig);
-                debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-                debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-                debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-                debug_msg("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-        }
-        else {
-                syslog(LOG_INFO, "Caught a signal %d; Shutting down.\n", sig);
-                event_base_loopexit(base, NULL);
-        }
+        syslog(LOG_INFO, "Caught an %d signal; Shutting down.\n", sig);
+        event_base_loopexit(base, NULL);
 }
 
 /* handling signals */

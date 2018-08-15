@@ -16,15 +16,10 @@
 void load_config(const char *config_fname);
 void free_config();
 const char* config_get_pid_file_name();
-
 void config_get_listen_address(const char **address);
-const char* config_get_listen_address_http();
-const char* config_get_listen_address_https();
-
 void config_get_connect_address(const char **address);
-
 void config_get_backlog(int *backlog);
-void config_check_use_ssl();
+void config_check_use_ssl(int *use_ssl);
 int config_get_UID();
 int config_get_GID();
 void config_check_core_module(); 

@@ -13,6 +13,7 @@
 
 #include <sysexits.h>
 
+struct sockaddr_storage listen_on_addr;
 struct sockaddr_storage connect_to_addr;
 int connect_to_addrlen = 0;
         
@@ -81,15 +82,10 @@ static void process_cmdline (int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-        const char *listen_http_address = NULL;
-        const char *listen_https_address = NULL;
-        const char *connect_address = NULL;
-        struct sockaddr_storage listen_on_http_addr;
-        struct sockaddr_storage listen_on_https_addr;
+        const char *address = NULL;
         int socklen;
 
-        struct evconnlistener *main_listener; // HTTPS if listen in two sockets (HTTP and HTTPS)
-        struct evconnlistener *second_listener; // HTTP if listen in two sockets (HTTP and HTTPS)
+        struct evconnlistener *listener;
         
         fprintf(stderr, "Libevent version: %s \n" , event_get_version());
 #ifndef NDEBUG
@@ -126,38 +122,23 @@ int main(int argc, char **argv)
                 }
         }
 
-        socklen = sizeof(listen_on_http_addr);
+        socklen = sizeof(listen_on_addr);
         connect_to_addrlen = sizeof(connect_to_addr);
-        memset(&listen_on_http_addr, 0, socklen);
+        memset(&listen_on_addr, 0, socklen);
         memset(&connect_to_addr, 0, connect_to_addrlen);
 
-        listen_http_address = config_get_listen_address_http();
-        listen_https_address = config_get_listen_address_https();
-
-
-        if(listen_http_address) {
-                if (evutil_parse_sockaddr_port(listen_http_address,(struct sockaddr*)&listen_on_http_addr, &socklen) < 0) 
+        config_get_listen_address(&address);
+        if(address) {
+                if (evutil_parse_sockaddr_port(address,(struct sockaddr*)&listen_on_addr, &socklen) < 0) 
                 {
-                        fprintf(stderr, "Can not parse listen HTTP address!!!\n");
+                        fprintf(stderr, "Can not parse listen address!!!\n");
                         exit(EXIT_FAILURE);
                 }
         }
-        
-        if(listen_https_address) {
-                if (evutil_parse_sockaddr_port(listen_https_address,(struct sockaddr*)&listen_on_https_addr, &socklen) < 0) 
-                {
-                        fprintf(stderr, "Can not parse listen HTTPS address!!!\n");
-                        exit(EXIT_FAILURE);
-                }
-                else {
-                        use_ssl = 1;
-                        config_check_use_ssl();
-                }
-        }
-
-        config_get_connect_address(&connect_address);
-        if(connect_address) {
-                if (evutil_parse_sockaddr_port(connect_address,(struct sockaddr*)&connect_to_addr, &connect_to_addrlen) < 0)
+        address = NULL;
+        config_get_connect_address(&address);
+        if(address) {
+                if (evutil_parse_sockaddr_port(address,(struct sockaddr*)&connect_to_addr, &connect_to_addrlen) < 0)
                 {
                         fprintf(stderr, "Can not parse connect address!!!\n");
                         exit(EXIT_FAILURE);
@@ -165,40 +146,32 @@ int main(int argc, char **argv)
         }
 
         config_get_backlog(&backlog);
+        config_check_use_ssl(&use_ssl);
         config_check_core_module();
 
         if (use_ssl && (init_ssl() != 0)) {
                 return 1;
         }
-        
-        if(use_ssl) {
-                main_listener = evconnlistener_new_bind(base, accept_cb, &use_ssl,
-                        LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE,
-                        backlog, (struct sockaddr*)&listen_on_https_addr, socklen);
+        listener = evconnlistener_new_bind(base, accept_cb, NULL,
+            LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE,
+            backlog, (struct sockaddr*)&listen_on_addr, socklen);
 
-                second_listener = evconnlistener_new_bind(base, accept_cb, NULL,
-                        LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE,
-                        backlog, (struct sockaddr*)&listen_on_http_addr, socklen);
-        }
-        else {
-                main_listener = evconnlistener_new_bind(base, accept_cb, NULL,
-                        LEV_OPT_CLOSE_ON_FREE|LEV_OPT_CLOSE_ON_EXEC|LEV_OPT_REUSEABLE,
-                        backlog, (struct sockaddr*)&listen_on_http_addr, socklen);
-
-                second_listener = NULL;
-        }
-
-        if (!main_listener) { 
+        if (!listener) {
                 fprintf(stderr, "Couldn't open listener.\n");
-                goto EXIT;
+                event_base_free(base);
+                free_config();
+                free_ssl();
+                return 1;
         }
-
         if(use_core_webtoolkit) {
-                proxy_core = http_core_init(main_listener, second_listener, listen_https_address);
+                proxy_core = http_core_init(listener);
                 if(proxy_core == NULL) {
                         fprintf(stderr, "Couldn't create http server.\n");
-                        evconnlistener_free(main_listener);
-                        goto EXIT;
+                        evconnlistener_free(listener);
+                        event_base_free(base);
+                        free_config();
+                        free_ssl();
+                        return 1;
                 }
         }
 
@@ -207,12 +180,8 @@ int main(int argc, char **argv)
 EXIT:
         if(use_core_webtoolkit)
                 free_proxy_core(proxy_core);
-        else {
-                if(main_listener)
-                        evconnlistener_free(main_listener);
-                if(second_listener)
-                        evconnlistener_free(second_listener);
-        }
+        else if(listener)
+                evconnlistener_free(listener);
 
         event_base_free(base);
 

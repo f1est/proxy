@@ -35,7 +35,7 @@ static int get_random_bytes(void *data, size_t size)
         return 0;
 }
 
-static void bin_to_readable(const char *in, char *out, size_t size, req_proxy_to_server_t *proxy_req)
+static void bin_to_readable(const void *in, char *out, size_t size, req_proxy_to_server_t *proxy_req)
 {
         EVP_MD_CTX *mdctx;
         const EVP_MD *md;
@@ -43,8 +43,6 @@ static void bin_to_readable(const char *in, char *out, size_t size, req_proxy_to
         unsigned char md_value[EVP_MAX_MD_SIZE];
         unsigned int md_len, i;
         const char *user_agent;
-
-        memset(md_value, '\0', EVP_MAX_MD_SIZE);
 
         user_agent = evhttp_find_header(evhttp_request_get_input_headers(proxy_req->req_client_to_proxy), "User-Agent");
         
@@ -80,11 +78,10 @@ static void bin_to_readable(const char *in, char *out, size_t size, req_proxy_to
  */ 
 int session_create_id(req_proxy_to_server_t *proxy_req, char *SID)
 {
-	char rbuf[MAX_RANDOM_BYTES_LENGTH + EXTRA_RAND_BYTES];
+	unsigned char rbuf[MAX_RANDOM_BYTES_LENGTH + EXTRA_RAND_BYTES];
         int res;
 
         memset(SID, '\0', MAX_SID_LENGTH);
-        rbuf[MAX_RANDOM_BYTES_LENGTH + EXTRA_RAND_BYTES - 1] = '\0';
         
         if (get_random_bytes(rbuf, MAX_RANDOM_BYTES_LENGTH) != 0) 
 		return -1;

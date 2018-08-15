@@ -14,10 +14,7 @@
 typedef struct http_proxy_core_s http_proxy_core_t;
 struct http_proxy_core_s {
         struct evhttp *http_server;
-        struct evhttp *http_server_2; /* using when listen HTTP and HTTPS */
         struct evhttp_bound_socket *evhttp_socket;
-        struct evhttp_bound_socket *evhttp_socket_2; /* using when listen HTTP and HTTPS */
-        const char *redirect_address;  /* using for redirect requests when listen HTTP and HTTPS */
         hashtable_t *SIDs; 
         cJSON *json_security_headers;
 };
@@ -39,8 +36,10 @@ struct req_proxy_to_server_s {
         base_t *hasSID; 
 };
 
+void readcb(struct bufferevent *bev, void *ctx);
 void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,struct sockaddr *a, int slen, void *p);
-http_proxy_core_t *http_core_init(struct evconnlistener *listener,struct evconnlistener *second_listener, const char* redirect_address);
+
+http_proxy_core_t *http_core_init(struct evconnlistener *listener);
 void free_proxy_core(http_proxy_core_t *core);
 
 #endif /* TRANSPORT_H */

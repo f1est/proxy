@@ -1,3 +1,5 @@
+** TODO: Переписать README **
+
 **Для загрузки проекта, используйте следующую команду:**
 ```sh
 git clone https://github.com/f1est/proxy.git --recurse-submodules
