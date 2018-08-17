@@ -14,7 +14,7 @@ enum route_of_headers {input,output};
 void print_input_req(struct evhttp_request* req);
 void print_output_req(struct evhttp_request* req);
 void print_evbuffer(struct evbuffer* buf);
-void print_parsed_uri(struct evhttp_uri* uri);
+void print_parsed_uri(const struct evhttp_uri* uri);
 
 int copy_request_parameters(struct evhttp_request *old_req, 
                 enum route_of_headers route_old_req,

@@ -36,9 +36,7 @@ struct req_proxy_to_server_s {
         base_t *hasSID; 
 };
 
-void readcb(struct bufferevent *bev, void *ctx);
 void accept_cb(struct evconnlistener *listener, evutil_socket_t fd,struct sockaddr *a, int slen, void *p);
-
 http_proxy_core_t *http_core_init(struct evconnlistener *listener);
 void free_proxy_core(http_proxy_core_t *core);
 

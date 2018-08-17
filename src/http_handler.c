@@ -23,9 +23,10 @@ static void print_headers(struct evhttp_request *req, enum route_of_headers rout
         struct evkeyval* kv = NULL;
         const char* str_route = NULL;
         struct evbuffer *buffer_body = NULL;
-        size_t len;
-        char *body = NULL;
 	const char *method;
+        char *address = NULL;
+        ev_uint16_t port;
+        struct evhttp_connection *evcon;
 
         switch(route){
 
@@ -48,7 +49,14 @@ static void print_headers(struct evhttp_request *req, enum route_of_headers rout
         if(!header || !buffer_body)
                 return;
                
-        
+        evcon = evhttp_request_get_connection(req);
+        if(evcon)
+                evhttp_connection_get_peer(evcon, &address, &port);
+
+        if(address)
+                fprintf(stderr,"\tPEER ADDRESS: \t%s:%d\n\n", address, port);
+                
+
 	switch (req->type) {
 	case EVHTTP_REQ_GET:
 		method = "GET";
@@ -86,9 +94,11 @@ static void print_headers(struct evhttp_request *req, enum route_of_headers rout
         kv = header->tqh_first;
 
         fprintf(stderr,"\tMETHOD: \t%s\n", method);
-        fprintf(stderr,"\tResponse code: %d %s\n", evhttp_request_get_response_code(req),
+        fprintf(stderr,"\tResponse code: \t%d %s\n", evhttp_request_get_response_code(req),
                                         evhttp_request_get_response_code_line(req));
-        fprintf(stderr,"\tURI: %s\n", evhttp_request_get_uri(req));
+        fprintf(stderr,"\tURI: \t\t%s\n", evhttp_request_get_uri(req));
+        print_parsed_uri(evhttp_request_get_evhttp_uri(req));
+        fprintf(stderr,"\n");
 
         while (kv) {
                 fprintf(stderr,"\t\t %s header: ", str_route);
@@ -107,22 +117,8 @@ static void print_headers(struct evhttp_request *req, enum route_of_headers rout
         
         fprintf(stderr,"\tget_host: %s\n\n", evhttp_request_get_host(req));
 
-        len = evbuffer_get_length(buffer_body);
-        
-        debug_msg("length of evbuffer = %zu", len);
-/*
-        if(len > 0) {
-                if((body = malloc(len)) == NULL) return;
-                evbuffer_copyout(buffer_body, body, len);
-                fprintf(stderr,"\tsize_body = %zu body:\n\n %s\n",len, body);
-        }
+        print_evbuffer(buffer_body);
 
-        else
-                fprintf(stderr, "\tlength of body is %zu \n\n",len);
-*/
-
-        if(body)
-                free(body);
 #endif
 }
 
@@ -138,7 +134,8 @@ void print_output_req(struct evhttp_request* req)
 /* for debugging */
 void print_evbuffer(struct evbuffer* buf)
 {
-#ifndef NDEBUG
+#if !defined(NDEBUG) && !defined(CLANG_SANITIZER)
+
         size_t len = 0;
         char *body = NULL;
 
@@ -148,7 +145,7 @@ void print_evbuffer(struct evbuffer* buf)
         if(len > 0) {
                 if((body = malloc(len+1)) == NULL) return;
                 evbuffer_copyout(buf, body, len);
-                fprintf(stderr,"\n\tsize_evbuffer = %zu evbuffer:\n %s\n",len, body);
+                fprintf(stderr,"\n\tsize_evbuffer = %zu evbuffer:\n======'\n%s\n'======\n",len, body);
         }
         else
                 fprintf(stderr, "\tlength of body is %zu \n\n",len);
@@ -158,32 +155,35 @@ void print_evbuffer(struct evbuffer* buf)
 #endif
 }
 
-void print_parsed_uri(struct evhttp_uri* uri)
+void print_parsed_uri(const struct evhttp_uri* uri)
 {
 #ifndef NDEBUG
-        if(uri == NULL)
+        if(uri == NULL) {
                 debug_msg("uri is NULL");
+                return;
+        }
 
-        fprintf(stderr, "URI: \n");
+        fprintf(stderr, "parsed URI: \n");
         if(evhttp_uri_get_scheme(uri))
-                fprintf(stderr,"\t scheme: '%s'\n", evhttp_uri_get_scheme(uri));
+                fprintf(stderr,"\t\tscheme: %s\n", evhttp_uri_get_scheme(uri));
 
         if(evhttp_uri_get_userinfo(uri))
-                fprintf(stderr,"\t userinfo: '%s'\n", evhttp_uri_get_userinfo(uri));
+                fprintf(stderr,"\t\tuserinfo: %s\n", evhttp_uri_get_userinfo(uri));
 
         if(evhttp_uri_get_host(uri))
-                fprintf(stderr,"\t host: '%s'\n", evhttp_uri_get_host(uri));
+                fprintf(stderr,"\t\thost: %s\n", evhttp_uri_get_host(uri));
         
-        fprintf(stderr,"\t port: '%d'\n", evhttp_uri_get_port(uri));
+        if(evhttp_uri_get_port(uri) >= 0)
+                fprintf(stderr,"\t\tport: %d\n", evhttp_uri_get_port(uri));
 
         if(evhttp_uri_get_path(uri))
-                fprintf(stderr,"\t path: '%s'\n", evhttp_uri_get_path(uri));
+                fprintf(stderr,"\t\tpath: %s\n", evhttp_uri_get_path(uri));
         
         if(evhttp_uri_get_query(uri))
-                fprintf(stderr,"\t query: '%s'\n", evhttp_uri_get_query(uri));
+                fprintf(stderr,"\t\tquery: %s\n", evhttp_uri_get_query(uri));
         
         if(evhttp_uri_get_fragment(uri))
-                fprintf(stderr,"\t fragment: '%s'\n", evhttp_uri_get_fragment(uri));
+                fprintf(stderr,"\t\tfragment: %s\n", evhttp_uri_get_fragment(uri));
         
 
 #endif
@@ -252,7 +252,7 @@ int copy_request_parameters(struct evhttp_request *old_req,
                 kv = kv->next.tqe_next;
         }
 
-        if(evbuffer_add_buffer(buffer_body_old_req, buffer_body_new_req) != 0) {
+        if(evbuffer_add_buffer(buffer_body_new_req, buffer_body_old_req) != 0) {
                 debug_msg("Couldn't copy buffer_body \n");
                 return -1;
         }
@@ -465,6 +465,11 @@ void proxy_create_reply(req_proxy_to_server_t * proxy_req)
         add_security_headers_to_response(proxy_req);
 }
 
+static void is_JQUERY(int i)
+{
+        debug_msg("%d is /js/jquery-1.11.1.min.js?v=20170519164616 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", i);
+}
+
 /* send reply from proxy to client */
 void proxy_send_reply(req_proxy_to_server_t * proxy_req)
 {
@@ -480,11 +485,16 @@ debug_msg("\t CHUNK END !!!!!!!!!!!!!!!!!!!!!!!!!!!!! END");
         else {
                 proxy_create_reply(proxy_req);
 
+if(strstr(evhttp_request_get_uri(proxy_req->req_client_to_proxy),"jquery-1.11.1.min.js")) {
+is_JQUERY(1);
+print_evbuffer(evhttp_request_get_input_buffer(proxy_req->req_proxy_to_server));
+}
                 evhttp_send_reply(proxy_req->req_client_to_proxy, evhttp_request_get_response_code(proxy_req->req_proxy_to_server),
                                 evhttp_request_get_response_code_line(proxy_req->req_proxy_to_server),
                                 evhttp_request_get_input_buffer(proxy_req->req_proxy_to_server));
-        }
 
+
+        }
         debug_msg("App->Proxy RESP:");
         print_input_req(proxy_req->req_proxy_to_server);
 
